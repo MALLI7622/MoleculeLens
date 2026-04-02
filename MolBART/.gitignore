@@ -1,0 +1,11 @@
+**/*.pkl
+**/*.swp
+**/.pytest_cache
+**/__pycache__
+**/*.egg-info/*
+**/.ipython/*
+**/.ipynb_checkpoints/*
+.vscode/
+**/workspace.code-workspace
+**/.bash*
+**/*.tfevents.*

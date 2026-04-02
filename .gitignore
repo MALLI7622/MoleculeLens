@@ -1,0 +1,59 @@
+# Large pretrained model weights and datasets (use download scripts to fetch)
+MoleculeSTM/data/pretrained_MoleculeSTM/
+MoleculeSTM/data/pretrained_SciBERT/
+MoleculeSTM/data/ChEMBL_data/
+MoleculeSTM/data/DrugBank_data/
+MoleculeSTM/data/pretrained_KV-PLM/
+
+# Large binary / data files
+*.pkl
+*.npz
+*.bin
+*.h5
+*.hdf5
+*.safetensors
+
+# PyTorch model outputs and checkpoints (cached embeddings, trained weights)
+*.pt
+*.pth
+MoleculeSTM/data/checkpoints/
+
+# MoleculeLens experiment outputs (regenerate by running scripts)
+MoleculeLens/outputs/
+MoleculeLens/outputs_cloob/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Conda / system installers and archives
+miniconda3/
+Miniconda3-latest-Linux-x86_64.sh
+workspace.tar.gz
+snap/
+*.run
+
+# Other large / irrelevant dirs not selected for push
+dLLM/
+dllm/
+apex/
+data/
+lib/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
