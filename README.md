@@ -22,6 +22,41 @@ cd /home/cheriearjun/MoleculeLens-paper
 git status
 ```
 
+## Build PDF Locally
+
+Compile the paper after making changes:
+
+```bash
+cd /home/cheriearjun/MoleculeLens-paper
+source ~/.bashrc
+latexmk -pdf -interaction=nonstopmode neurips_2026.tex
+```
+
+Force a clean rebuild if the PDF does not refresh:
+
+```bash
+cd /home/cheriearjun/MoleculeLens-paper
+source ~/.bashrc
+latexmk -C
+latexmk -pdf -interaction=nonstopmode neurips_2026.tex
+```
+
+## Show Author Names In PDF
+
+If you want to see your real author names locally, use preprint mode in `neurips_2026.tex`:
+
+```tex
+\usepackage[preprint]{neurips_2026}
+```
+
+The default line:
+
+```tex
+\usepackage{neurips_2026}
+```
+
+keeps the paper anonymous for submission.
+
 ## Current Main Files
 
 - `neurips_2026.tex` — main paper source
