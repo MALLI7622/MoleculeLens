@@ -136,7 +136,7 @@ Two points matter for interpretation. First, the global Thin Bridges result rema
 
 \subsection{Drug-Name Leakage}
 
-Table~\ref{tab:leakage-results} revisits the leakage question by removing explicit drug names from the text. As expected, all text-aware models degrade to some extent. The important comparison is between the old global Thin Bridges setup and the new scaffold model. The global setting drops by 80.5\% relative Recall@1, while MoleculeLens drops by 41.0\%. This does not eliminate leakage, but it suggests that scaffold-disjoint evaluation plus a lighter bridge produces a less brittle retrieval model than the earlier memorization-heavy setup.
+Table~\ref{tab:leakage-results} revisits the leakage question by removing explicit drug names from the text. As expected, all text-aware models degrade to some extent. The important comparison is between the old global Thin Bridges setup and the new scaffold model. The global setting drops by 80.5\% relative Recall@1, while MoleculeLens drops by 41.0\%. MolPrompt and KV-PLM show similarly substantial relative drops of 44.6\% and 37.5\%, respectively. This does not eliminate leakage, but it suggests that scaffold-disjoint evaluation plus a lighter bridge produces a less brittle retrieval model than the earlier memorization-heavy setup.
 
 \begin{table}[t]
 \centering
