@@ -111,7 +111,7 @@ The current scaffold model uses batch size 512, learning rate $10^{-3}$, weight 
 
 \subsection{Primary Retrieval Comparison}
 
-Table~\ref{tab:main-results} shows the main comparison. MoleculeLens achieves the strongest Recall@1 and MRR among the held-out scaffold models, improving on MolPrompt by roughly five Recall@1 points and on KV-PLM by more than twelve Recall@1 points. The zero-shot Graphormer baseline performs near chance on this retrieval task. These results suggest that the thin-bridge design remains competitive when evaluated on unseen scaffolds rather than on the earlier full-gallery setup.
+Table~\ref{tab:main-results} shows the main comparison. MoleculeLens achieves the strongest Recall@1 and MRR among the held-out scaffold models, improving on MolPrompt by roughly five Recall@1 points and on KV-PLM by more than twelve Recall@1 points. The zero-shot Graphormer baseline performs near chance on this retrieval task. For additional context, we also include available full-gallery reference runs for MolPrompt and KV-PLM. These results suggest that the thin-bridge design remains competitive when evaluated on unseen scaffolds rather than on the earlier full-gallery setup.
 
 \begin{table}[t]
 \centering
@@ -123,8 +123,10 @@ Table~\ref{tab:main-results} shows the main comparison. MoleculeLens achieves th
 Model & Eval Set & Recall@1 & MRR & Recall@5 & Recall@10 \\
 \midrule
 MoleculeSTM (zero-shot) & Full gallery ($N{=}2699$) & 0.089 & 0.171 & 0.243 & 0.337 \\
-Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.015 & 0.011 & 0.025 \\
 Thin Bridges (Global) & Full gallery ($N{=}2699$) & 0.747 & 0.849 & 0.985 & 0.997 \\
+MolPrompt (Global) & Full gallery ($N{=}2699$) & 0.123 & 0.264 & 0.405 & 0.590 \\
+KV-PLM (Global) & Full gallery ($N{=}2699$) & 0.015 & 0.038 & 0.044 & 0.074 \\
+Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.015 & 0.011 & 0.025 \\
 \textbf{MoleculeLens (ours)} & Scaffold test ($N{=}435$) & \textbf{0.179} & \textbf{0.270} & 0.379 & 0.455 \\
 MolPrompt & Scaffold test ($N{=}435$) & 0.129 & 0.256 & \textbf{0.400} & \textbf{0.531} \\
 KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
@@ -132,11 +134,11 @@ KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
 \end{tabular}
 \end{table}
 
-Two points matter for interpretation. First, the global Thin Bridges result remains much higher than every scaffold-disjoint result, which reinforces that the earlier setting should be viewed as a reference rather than a fair main comparison. Second, MolPrompt attains stronger Recall@10 than MoleculeLens, suggesting that MoleculeLens is better at placing the correct match near the top of the list but may still lose ground on broader candidate coverage.
+Two points matter for interpretation. First, the global Thin Bridges result remains much higher than every other full-gallery or scaffold-disjoint result, which reinforces that the earlier setting should be viewed as a reference rather than a fair main comparison. Second, MolPrompt attains stronger Recall@10 than MoleculeLens on the scaffold split, suggesting that MoleculeLens is better at placing the correct match near the top of the list but may still lose ground on broader candidate coverage. A full-gallery Graphormer row is not included because the corresponding zero-shot run was repeatedly killed by local system resource limits before completion.
 
 \subsection{Drug-Name Leakage}
 
-Table~\ref{tab:leakage-results} revisits the leakage question by removing explicit drug names from the text. As expected, all text-aware models degrade to some extent. The important comparison is between the old global Thin Bridges setup and the new scaffold model. The global setting drops by 80.5\% relative Recall@1, while MoleculeLens drops by 41.0\%. MolPrompt and KV-PLM show similarly substantial relative drops of 44.6\% and 37.5\%, respectively. This does not eliminate leakage, but it suggests that scaffold-disjoint evaluation plus a lighter bridge produces a less brittle retrieval model than the earlier memorization-heavy setup.
+Table~\ref{tab:leakage-results} revisits the leakage question by removing explicit drug names from the text. As expected, all text-aware models degrade to some extent. The important comparison is between the old global Thin Bridges setup and the new scaffold model. The global Thin Bridges setting drops by 80.5\% relative Recall@1, while global KV-PLM drops by 65.0\% and scaffold MoleculeLens drops by 41.0\%. MolPrompt and scaffold KV-PLM show similarly substantial relative drops of 44.6\% and 37.5\%, respectively. This does not eliminate leakage, but it suggests that scaffold-disjoint evaluation plus a lighter bridge produces a less brittle retrieval model than the earlier memorization-heavy setup.
 
 \begin{table}[t]
 \centering
@@ -148,8 +150,9 @@ Table~\ref{tab:leakage-results} revisits the leakage question by removing explic
 Model & Eval Set & With Drug & No Drug & Abs.\ Drop & \% Drop \\
 \midrule
 MoleculeSTM (zero-shot) & Full gallery ($N{=}2699$) & 0.089 & 0.014 & 0.074 & 83.8 \\
-Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.005 & -0.002 & -100.0 \\
 Thin Bridges (Global) & Full gallery ($N{=}2699$) & 0.747 & 0.145 & 0.601 & 80.5 \\
+KV-PLM (Global) & Full gallery ($N{=}2699$) & 0.015 & 0.005 & 0.010 & 65.0 \\
+Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.005 & -0.002 & -100.0 \\
 \textbf{MoleculeLens (ours)} & Scaffold test ($N{=}435$) & \textbf{0.179} & \textbf{0.106} & \textbf{0.074} & \textbf{41.0} \\
 MolPrompt & Scaffold test ($N{=}435$) & 0.129 & 0.071 & 0.057 & 44.6 \\
 KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.034 & 0.021 & 37.5 \\
@@ -157,7 +160,7 @@ KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.034 & 0.021 & 37.5 \\
 \end{tabular}
 \end{table}
 
-The Graphormer row is unstable because the absolute scores are already near chance, so its apparent negative drop should not be overinterpreted. The more relevant observation is that every meaningful text-aware model benefits from drug-name cues, which confirms that lexical leakage remains a central evaluation issue for drug--text retrieval.
+The Graphormer row is unstable because the absolute scores are already near chance, so its apparent negative drop should not be overinterpreted. A full-gallery no-drug MolPrompt run was not available at draft time, so only the scaffold MolPrompt leakage row is reported. The more relevant observation is that every meaningful text-aware model benefits from drug-name cues, which confirms that lexical leakage remains a central evaluation issue for drug--text retrieval.
 
 \section{Discussion}
 
