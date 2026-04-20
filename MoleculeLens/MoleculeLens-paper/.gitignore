@@ -5,6 +5,7 @@
 *.fls
 *.log
 *.out
-*.pdf
 *.synctex.gz
 *.txt
+# Exclude compiled output but keep figure PDFs
+neurips_2026.pdf
