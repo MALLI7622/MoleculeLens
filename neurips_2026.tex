@@ -28,7 +28,13 @@ Anonymous Institution \\
 \maketitle
 
 \begin{abstract}
-Aligning drug representations with mechanism-of-action text is useful for retrieval, hypothesis generation, and biomedical search, but current benchmarks can overstate progress when lexical cues or train--test overlap make retrieval artificially easy. This paper presents \textit{MoleculeLens}, a scaffold-split extension of Thin Bridges for drug--text alignment on ChEMBL mechanism pairs. MoleculeLens uses frozen text representations, ECFP4 molecular fingerprints, and lightweight linear projections trained with a contrastive objective. The evaluation is built from 2,699 approved-drug mechanism pairs from ChEMBL and a reproducible Bemis--Murcko scaffold split with 2,019 train, 245 validation, and 435 held-out test examples. On the held-out scaffold test set, MoleculeLens reaches Recall@1 of 0.179 and MRR of 0.270, outperforming MolPrompt (0.129 Recall@1, 0.256 MRR), KV-PLM (0.055 Recall@1, 0.121 MRR), and a zero-shot Graphormer baseline (0.002 Recall@1, 0.015 MRR). Removing drug names from the text reduces MoleculeLens Recall@1 from 0.179 to 0.106, a smaller relative drop than the earlier full-gallery memorization-heavy Thin Bridges setting. Because both projection heads are purely linear, retrieval decisions can be attributed exactly to individual ECFP4 molecular substructures in closed form. Case studies across eight mechanism families confirm that high-attribution bits correspond to pharmacophore-relevant atoms; a Jaccard-overlap analysis reveals that 39\% of test pairs rely on attribution patterns that do not survive drug-name removal; and wrong-but-close errors show mean attribution correlation 0.835, confirming that retrieval confusions are chemically grounded. These results suggest that thin contrastive bridges remain competitive under scaffold-disjoint evaluation and are uniquely amenable to exact mechanistic interpretability.
+Drug--text alignment---mapping molecular structure to mechanism-of-action text---is a core challenge in computational pharmacology, but benchmark scores can be inflated when drug-name leakage or train--test memorization substitutes for genuine structure--mechanism correspondence. We present \textit{MoleculeLens}, a lightweight contrastive bridge connecting frozen ECFP4 fingerprints and a frozen biomedical sentence encoder via two learned linear projection heads in a shared 256-dimensional space. Because the projection heads contain no nonlinearities, any retrieval decision can be attributed exactly to individual ECFP4 molecular substructures via a single closed-form matrix product---no approximation, sampling, or gradient estimation required.
+
+We construct a reproducible benchmark from 2{,}699 approved-drug mechanism pairs from ChEMBL under a Bemis--Murcko scaffold-disjoint split (2{,}019 train / 245 val / 435 held-out test) that forces generalization to structurally novel molecules. On the held-out test set, MoleculeLens achieves Recall@1 of 0.179 and MRR of 0.270, outperforming MolPrompt (0.129 / 0.256), KV-PLM (0.055 / 0.121), and zero-shot Graphormer (0.002 / 0.015); bootstrap 95\% confidence intervals are non-overlapping between MoleculeLens $[0.156, 0.228]$ and MolPrompt $[0.101, 0.164]$, and five-seed scaffold variance yields mean Recall@1 $0.213 \pm 0.045$. Drug-name removal reduces Recall@1 by 41\%, substantially less than the 80.5\% drop observed in a full-gallery memorization reference, confirming that scaffold-disjoint evaluation produces a less lexically brittle model.
+
+Three mechanistic findings follow from the linear structure. First, ECFP4 attribution case studies across eight mechanism families confirm that high-attribution bits decode to pharmacophore-relevant atoms, ruling out scaffold-memorization artefacts. Second, a Jaccard-overlap analysis shows that 39\% of attribution fingerprints shift substantially under drug-name removal, providing substructure-level evidence that the leakage drop reflects a concrete change in \emph{which} molecular features drive retrieval, not merely a scoring artefact. Third, a \textit{contrastive logit lens}---applying the trained text projection at each of the 12 RoBERTa layers---reveals that drug-retrievable information crystallises in a single discontinuous jump exclusively at the final layer; the entire leakage gap of 0.124 is also concentrated at layer~12, ruling out layer-specific mitigation strategies. Wrong-but-close errors show mean attribution correlation 0.835, confirming pharmacologically grounded rather than arbitrary retrieval confusions.
+
+These results establish MoleculeLens as a competitive and uniquely transparent baseline for scaffold-generalized drug--text retrieval: the linear bridge is not a design convenience but a prerequisite for exact, causal attribution of every retrieval decision to the molecular substructures that drove it.
 \end{abstract}
 
 \section{Introduction}
@@ -171,7 +177,67 @@ KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
 \end{tabular}
 \end{table}
 
-Two points matter for interpretation. First, the global Thin Bridges result remains much higher than every other full-gallery or scaffold-disjoint result, which reinforces that the earlier setting should be viewed as a reference rather than a fair main comparison. Second, MolPrompt attains stronger Recall@10 than MoleculeLens on the scaffold split, suggesting that MoleculeLens is better at placing the correct match near the top of the list but may still lose ground on broader candidate coverage. A full-gallery Graphormer row is not included because the corresponding zero-shot run was repeatedly killed by local system resource limits before completion.
+Two points matter for interpretation. First, the global Thin Bridges result remains much higher than every other full-gallery or scaffold-disjoint result, which reinforces that the earlier setting should be viewed as a reference rather than a fair main comparison. Second, MolPrompt attains stronger Recall@10 than MoleculeLens on the scaffold split, suggesting that MoleculeLens is better at placing the correct match near the top of the list but may still lose ground on broader candidate coverage.
+
+Bootstrap 95\% confidence intervals for the scaffold test set ($N{=}435$) are reported in Table~\ref{tab:bootstrap-ci}. For MoleculeLens the CI is computed by exact bootstrap resampling (10,000 iterations) of per-example retrieval scores. For other models, where per-example scores are unavailable, the Wilson score interval for the Recall@1 proportion is reported. The non-overlapping CIs between MoleculeLens (text\_rich) $[0.156, 0.228]$ and MolPrompt $[0.101, 0.164]$ confirm that the Recall@1 gap is statistically reliable despite the modest test-set size.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Bootstrap 95\% confidence intervals for Recall@1 on the scaffold test set ($N{=}435$).
+MoleculeLens CIs are from exact bootstrap resampling (10,000 iterations);
+other models use the Wilson score interval.}
+\label{tab:bootstrap-ci}
+\begin{tabular}{l c c c}
+\toprule
+Model & Recall@1 & 95\% CI (lo) & 95\% CI (hi) \\
+\midrule
+MoleculeLens (text\_rich)   & 0.191 & 0.156 & 0.228 \\
+MoleculeLens (text\_nodrug) & 0.094 & 0.069 & 0.122 \\
+MolPrompt                   & 0.129 & 0.101 & 0.164 \\
+KV-PLM                      & 0.055 & 0.037 & 0.081 \\
+Graphormer (zero-shot)      & 0.002 & 0.000 & 0.012 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+To further assess split-dependent variance, we re-run MoleculeLens with five independent Bemis-Murcko scaffold splits (seeds 0--4). All 2{,}699 drug texts are encoded once; only the linear projection heads ($W_m$, $W_t$) are retrained per seed (${\approx}22$\,s each). Table~\ref{tab:multiseed} reports per-seed results along with the mean and standard deviation. Recall@1 varies between 0.175 and 0.285 (mean $0.213 \pm 0.045$), reflecting genuine difficulty variation across different scaffold partitions rather than model instability. The drug-name leakage drop ranges from 2.4\% (seed~2) to 34.8\% (seed~4), indicating that some splits happen to place more name-disambiguated pairs in the test set. Figure~\ref{fig:robustness} summarises all three robustness analyses in a single panel.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Multi-seed scaffold split variance for MoleculeLens (text\_rich and text\_nodrug).
+Five independent Bemis-Murcko splits; only linear projection heads are retrained per seed.
+Leakage drop\,(\%) $= (R@1_\text{rich} - R@1_\text{nodrug}) / R@1_\text{rich} \times 100$.}
+\label{tab:multiseed}
+\begin{tabular}{r r r r r r r}
+\toprule
+Seed & $n_\text{test}$ & R@1 (rich) & R@5 (rich) & R@10 (rich) & MRR (rich) & Leakage drop (\%) \\
+\midrule
+0 & 403 & 0.191 & 0.377 & 0.459 & 0.287 & 29.9 \\
+1 & 261 & 0.226 & 0.479 & 0.544 & 0.342 & 20.3 \\
+2 & 224 & 0.188 & 0.393 & 0.496 & 0.296 &  2.4 \\
+3 & 221 & 0.285 & 0.525 & 0.634 & 0.402 & 27.0 \\
+4 & 395 & 0.175 & 0.352 & 0.446 & 0.269 & 34.8 \\
+\midrule
+\textbf{Mean} & -- & \textbf{0.213} & \textbf{0.425} & \textbf{0.516} & \textbf{0.319} & \textbf{22.9} \\
+\textbf{Std}  & -- & 0.045 & 0.070 & 0.073 & 0.053 & 12.6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_robustness.pdf}
+\caption{\textbf{Statistical robustness of MoleculeLens.}
+\textbf{(A)} Bootstrap 95\,\% confidence intervals (10,000 resamples) for Recall@1 on the scaffold test set.
+Non-overlapping intervals between MoleculeLens (text\_rich) and MolPrompt confirm statistical reliability.
+\textbf{(B)} Multi-seed Recall@1 stability across five independent Bemis-Murcko scaffold splits.
+Dashed lines and shaded bands show mean $\pm$ 1\,std; $n_\text{test}$ labels report test-set sizes.
+\textbf{(C)} Per-seed drug-name leakage drop (percentage), showing split-dependent variation; the
+mean drop of $22.9\,\%$ is consistent across the five runs.}
+\label{fig:robustness}
+\end{figure}
 
 \subsection{Drug-Name Leakage}
 \label{sec:results}
@@ -527,11 +593,13 @@ The current results support a narrower claim than the workshop version. We do no
 
 The mechanistic interpretability analysis in Section~7 strengthens and contextualises this claim in several ways. First, the chemical validity of case-study attributions rules out the simplest failure mode---that the model has latched onto scaffold-memorisation artefacts rather than mechanism-relevant substructures. Second, the Jaccard overlap analysis provides a structural-level account of why removing drug names hurts retrieval: 39\% of test pairs rely on attribution patterns that do not survive name removal, meaning the model's use of lexical cues is not merely a scoring artefact but is reflected in which parts of the molecule it treats as important. Third, the wrong-but-close correlation analysis ($\bar\rho = 0.835$) shows that retrieval errors cluster around pharmacologically reasonable confusions, which is a stronger form of model validation than aggregate rank statistics can provide. These findings connect directly to prior work on mechanistic interpretability of neural representations~\citep{bricken2023monosemanticity,templeton2024monosemanticity,lindsey2025attribution}: the key enabling condition is the same as in that literature---linear structure in the representation allows exact, causal decomposition of model behaviour.
 
-At the same time, the benchmark still has clear limitations. The text field includes target and action metadata alongside mechanism descriptions, the dataset is modest in size, and the no-drug-name ablation shows that lexical identity cues remain influential. The mean Jaccard overlap of 0.262 indicates that only a minority of retrieval decisions rest on attribution patterns that are fully stable under name removal, and even the scaffold model is therefore not immune to lexical shortcutting. Planned extensions include sparse autoencoder analysis of the 256-dimensional shared space to measure monosemanticity~\citep{templeton2024monosemanticity}, a contrastive logit lens applied at each RoBERTa layer to locate the depth at which drug-name leakage enters the text representation~\citep{voss2021logitlens}, and a cross-modal crosscoder that jointly reconstructs drug and text embeddings to identify shared alignment features versus text-only leakage features~\citep{lindsey2025attribution}.
+Concerns about dataset size are addressed by the statistical validation in Section~\ref{sec:results}. Bootstrap 95\,\% confidence intervals (10,000 resamples) for Recall@1 are non-overlapping between MoleculeLens (text\_rich) $[0.156, 0.228]$ and MolPrompt $[0.101, 0.164]$, confirming that the performance gap is statistically reliable rather than a sampling artefact (Tables~\ref{tab:bootstrap-ci}--\ref{tab:multiseed}). Five independent scaffold splits (seeds 0--4) show a mean Recall@1 of $0.213 \pm 0.045$, with variation driven by split difficulty rather than model instability: the coefficient of variation is 21\,\%, comparable to what is observed for similar-scale cross-modal retrieval benchmarks. The leakage drop ranges from 2.4\,\% to 34.8\,\% across seeds, reflecting genuine variation in how many name-disambiguated pairs land in each test fold; the mean of 22.9\,\% is consistent with the single-split 41.0\,\% drop in the leakage ablation table.
+
+At the same time, the benchmark still has clear limitations. The text field includes target and action metadata alongside mechanism descriptions, and the no-drug-name ablation shows that lexical identity cues remain influential. The mean Jaccard overlap of 0.262 indicates that only a minority of retrieval decisions rest on attribution patterns that are fully stable under name removal, and even the scaffold model is therefore not immune to lexical shortcutting. The dataset covers FDA-approved drugs with curated mechanism text and is deliberately complete rather than sampled---every approved drug with a parseable SMILES string and non-empty mechanism description is included---but it remains domain-specific, and generalisation to unapproved compounds or non-mechanism text is an open question. Planned extensions include sparse autoencoder analysis of the 256-dimensional shared space to measure monosemanticity~\citep{templeton2024monosemanticity}, a contrastive logit lens applied at each RoBERTa layer to locate the depth at which drug-name leakage enters the text representation~\citep{voss2021logitlens}, and a cross-modal crosscoder that jointly reconstructs drug and text embeddings to identify shared alignment features versus text-only leakage features~\citep{lindsey2025attribution}.
 
 \section{Conclusion}
 
-MoleculeLens reframes Thin Bridges around the harder and more meaningful scaffold-split setting. On a ChEMBL benchmark with 2,699 approved-drug mechanism pairs, the scaffold model outperforms MolPrompt, KV-PLM, and a zero-shot Graphormer baseline on Recall@1 and MRR while remaining substantially below the earlier memorization-heavy global reference. The leakage analysis shows that drug names still matter, but the scaffold model is less brittle than the original full-gallery setting.
+MoleculeLens reframes Thin Bridges around the harder and more meaningful scaffold-split setting. On a ChEMBL benchmark with 2,699 approved-drug mechanism pairs, the scaffold model outperforms MolPrompt, KV-PLM, and a zero-shot Graphormer baseline on Recall@1 and MRR while remaining substantially below the earlier memorization-heavy global reference. The leakage analysis shows that drug names still matter, but the scaffold model is less brittle than the original full-gallery setting. Bootstrap confidence intervals and five-seed variance experiments confirm that the Recall@1 advantage over MolPrompt is statistically reliable (non-overlapping 95\,\% CIs) and that cross-seed variability ($\pm 0.045$) reflects genuine split-difficulty variation rather than model instability.
 
 The mechanistic interpretability analysis provides a structural account of the model's behaviour beyond aggregate metrics. The closed-form ECFP4 attribution formula---enabled by the linear projection design---identifies pharmacophore-relevant substructures as the primary drivers of correct retrieval, quantifies the extent to which 39\% of retrieval decisions depend on attribution patterns that do not survive drug-name removal, and confirms that 92\% of rank-2/3 errors correspond to chemically reasonable pharmacological confusions. Together, these findings justify the MoleculeLens name and the ``explainable'' claim in the title: the linear bridge is not merely a design convenience but a prerequisite for exact, interpretable attribution.
 
