@@ -1,6 +1,16 @@
 # MoleculeLens Paper Repo
 
-This repository contains the LaTeX source for the paper draft.
+This directory contains the LaTeX source for the paper draft.
+
+The canonical paper-artifact refresh flow now lives at the repo root:
+
+```bash
+cd /home/cheriearjun/MoleculeLens
+bash scripts/run_paper_artifact_refresh.sh
+```
+
+That command rewrites the comparison manifests, canonical Track 1 / Track 3
+artifacts, paper figures, `results/paper_artifact_manifest.json`, and the PDF.
 
 ## Push Changes
 

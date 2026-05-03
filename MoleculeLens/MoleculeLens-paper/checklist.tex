@@ -5,7 +5,7 @@
 \item {\bf Claims}
     \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The abstract and introduction state four specific contributions (exact attribution framework, leakage anatomy, contrastive logit lens, reproducible scaffold benchmark) that are each demonstrated experimentally in the corresponding sections. The scope is explicitly limited to FDA-approved drugs with ChEMBL mechanism text under scaffold-disjoint evaluation.
+    \item[] Justification: The abstract and introduction state four specific contributions (validated closed-form linear saliency framework, leakage anatomy, descriptive contrastive logit-lens diagnostic, reproducible scaffold benchmark) that are each demonstrated experimentally in the corresponding sections. The scope is explicitly limited to FDA-approved drugs with ChEMBL mechanism text under scaffold-disjoint evaluation.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the abstract and introduction do not include the claims made in the paper.
@@ -17,7 +17,7 @@
 \item {\bf Limitations}
     \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The Discussion (Section~9) and the Limitations and Future Work appendix cover: (i) dataset scope limited to FDA-approved drugs; (ii) residual implicit lexical leakage not captured by the drug-name ablation; (iii) absence of non-neural baselines; (iv) domain-specificity and the open question of generalization to unapproved compounds.
+    \item[] Justification: The Discussion (Section~9) and the Limitations and Future Work appendix cover: (i) dataset scope limited to FDA-approved drugs; (ii) residual implicit lexical leakage not captured by the drug-name ablation; (iii) target/action metadata leakage quantified by the mechanism-only ablation; (iv) the restriction of the primary comparison to cross-modal structure-aware baselines; (v) missing adapted evaluations of newer molecular language models; (vi) domain-specificity and the open question of generalization to unapproved compounds.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper has no limitation while the answer \answerNo{} means that the paper has limitations, but those are not discussed in the paper.
@@ -33,7 +33,7 @@
 \item {\bf Theory assumptions and proofs}
     \item[] Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
     \item[] Answer: \answerNA{}
-    \item[] Justification: The paper contains no formal theorems. The closed-form attribution formula (Eq.~2) follows directly from the linearity of the projection heads and is self-evident from its derivation in Section~7.1; no separate proof is required.
+    \item[] Justification: The paper contains no formal theorems. Equation~2 is presented as a closed-form linear saliency approximation derived directly from the linear projection heads; its approximation status and omitted bias/normalization terms are stated explicitly in Section~7.1, so no separate proof is required.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include theoretical results.
@@ -47,7 +47,7 @@
     \item {\bf Experimental result reproducibility}
     \item[] Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
     \item[] Answer: \answerYes{}
-    \item[] Justification: Section~3 describes the ChEMBL data construction (max\_phase filter, SMILES fetching, Bemis--Murcko scaffold split), Section~5.2 gives all hyperparameters (batch size, LR, weight decay, temperature, margin, epochs), and the attribution formula is given in closed form in Eq.~2. The scaffold split manifest and projection weights will be released alongside the code.
+    \item[] Justification: Section~3 describes the ChEMBL data construction (max\_phase filter, SMILES fetching, Bemis--Murcko scaffold split), Section~5.2 gives all hyperparameters (batch size, LR, weight decay, temperature, margin, epochs), and Section~7.1 states the linear saliency formula and its approximation assumptions. The repo now includes a single refresh command, \texttt{bash scripts/run\_paper\_artifact\_refresh.sh}, which rewrites the comparison manifest, canonical Track~1/Track~3 artifacts, paper figures, and a machine-readable \texttt{results/paper\_artifact\_manifest.json} that records the source files and key numbers backing the manuscript.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.
@@ -67,7 +67,7 @@
 \item {\bf Open access to data and code}
     \item[] Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
     \item[] Answer: \answerNo{}
-    \item[] Justification: Code and benchmark data (scaffold split manifest, projection weights) will be released publicly upon acceptance of the paper. The data is derived entirely from ChEMBL, which is publicly available under CC BY-SA 3.0.
+    \item[] Justification: Code and benchmark data (scaffold split manifest, projection weights, repo-root README, and the canonical \texttt{scripts/run\_paper\_artifact\_refresh.sh} entrypoint) will be released publicly upon acceptance of the paper. The data is derived entirely from ChEMBL, which is publicly available under CC BY-SA 3.0.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that paper does not include experiments requiring code.
