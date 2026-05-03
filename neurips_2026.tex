@@ -33,238 +33,234 @@ We present \textit{MoleculeLens}, a framework for interpretable drug--text retri
 
 \section{Introduction}
 
-Drug--text alignment asks whether molecular structures and natural-language descriptions of mechanism can be embedded in a common space for retrieval. A robust solution would support mechanism-based search, structured pharmacology retrieval, and retrieval-augmented drug discovery workflows. In practice, however, current evaluations leave two questions unresolved. First, strong retrieval scores can arise from shortcut signals such as drug names, target metadata, or scaffold-correlated memorisation rather than genuine structure--mechanism correspondence. Second, even when retrieval succeeds, standard dual-encoder models provide little evidence about \emph{which molecular features actually made the match possible}.
+Drug--text alignment asks whether molecular structures and mechanism descriptions can be embedded in a common space for retrieval. A useful system should generalize beyond memorized scaffolds and should reveal which molecular features support each match. Current evaluations make both questions difficult: drug names, target labels, and scaffold-correlated training examples can inflate retrieval scores, while standard dual encoders provide little evidence about the substructures behind a prediction.
 
-MoleculeLens is designed around these two problems. It uses fixed ECFP4 fingerprints for molecules and a frozen biomedical text encoder for mechanism descriptions, and learns only linear projections into a shared embedding space. This deliberately constrained architecture is not merely a simplification choice: it makes each retrieval decision analyzable with a fast closed-form saliency proxy. By projecting a text embedding back through the molecule-side map, we obtain a linear saliency score for each ECFP4 bit and decode the top-scoring bits to concrete molecular substructures. No post-hoc explainer or sampling-based approximation is required, and in Section~7 we validate the proxy against exact gradients and exact leave-one-bit-out score drops.
+MoleculeLens addresses these issues with a deliberately constrained architecture. It combines frozen ECFP4 fingerprints and a frozen biomedical text encoder with learned linear projection heads. The linear molecule-side bridge yields a closed-form saliency proxy over ECFP4 bits, which can be decoded with RDKit into atom-level substructures. We validate this proxy against exact gradients and exact leave-one-bit-out score drops, then use it to audit retrieval decisions and drug-name leakage under a scaffold-disjoint ChEMBL split.
 
-To study this in a setting where retrieval quality is harder to inflate, we construct a reproducible ChEMBL benchmark of 2{,}699 approved-drug mechanism pairs under a Bemis--Murcko scaffold-disjoint split. The benchmark reduces opportunities to memorise training scaffolds while preserving a chemically meaningful retrieval task. It also supports an explicit no-drug-name ablation, allowing us to separate mechanism grounding from lexical identity cues.
-
-Within this setting, MoleculeLens serves two purposes. As a retrieval model, it provides a lightweight and interpretable baseline that remains competitive on held-out scaffolds. As an analysis tool, it turns the shared embedding space into something auditable: we can inspect the substructures behind correct matches, validate the linear saliency approximation against the exact normalized score, measure how attribution patterns shift when drug names are removed, and trace where drug-retrievable information appears across layers of the frozen text encoder.
-
-This paper makes four concrete contributions:
-\begin{enumerate}
-  \item \textbf{Validated closed-form linear saliency for drug--text retrieval.} We introduce an interpretable dual-encoder retrieval framework whose linear molecule-side projection enables closed-form saliency scores over ECFP4 bits, and we validate this proxy against exact gradients and exact leave-one-bit-out score changes.
-  \item \textbf{A reproducible scaffold-disjoint benchmark.} We construct a Bemis--Murcko scaffold-disjoint ChEMBL benchmark from 2{,}699 approved-drug mechanism pairs and evaluate MoleculeLens against MolPrompt, KV-PLM, and a zero-shot Graphormer baseline.
-  \item \textbf{A structural account of lexical leakage.} We show with a same-model text ablation that removing drug names changes not only retrieval accuracy but also the substructures that the fixed rich model treats as important, yielding a mechanistic view of leakage beyond aggregate score drops.
-  \item \textbf{A descriptive layer-wise diagnostic of text-side retrieval signal.} We adapt the logit-lens idea to contrastive retrieval and use it as a sanity check for where the frozen biomedical text encoder exposes drug-retrievable CLS information.
-\end{enumerate}
+This paper makes four contributions. First, we introduce validated closed-form linear saliency for drug--text retrieval. Second, we construct a reproducible scaffold-disjoint benchmark of 2,699 approved-drug mechanism pairs. Third, we show that leakage from explicit drug names is visible not only in retrieval scores but also in which molecular substructures the fixed rich model treats as salient. Fourth, we provide a descriptive contrastive logit-lens diagnostic showing that drug-retrievable CLS information in the frozen text encoder appears almost entirely at the final layer.
 
 \section{Related Work}
 
-\paragraph{Molecule--text representation learning.}
-Recent work has explored joint learning over molecular structures and natural language, including retrieval-oriented models such as Text2Mol~\citep{edwards2021text2mol}, molecular language models such as MolT5~\citep{edwards2022molt5} and BioT5~\citep{pei2023biot5}, graph-language models such as MolCA~\citep{liu2023molca}, multimodal pretrained models such as KV-PLM~\citep{zeng2022kvplm}, and broader molecular benchmark suites such as MoleculeNet~\citep{wu2018moleculenet}. These systems differ in molecular modality, text domain, and supervision strategy, but they share a common assumption that chemically meaningful structure--text correspondences can be captured in a shared space. Our benchmark is complementary to these models: it isolates FDA-approved drug mechanism retrieval under scaffold shift and emphasizes auditable substructure-level explanations rather than maximum-capacity generation or captioning.
+\paragraph{Molecule--text retrieval and molecular representation learning.}
+Drug--text and molecule--language models include retrieval-oriented systems such as Text2Mol~\citep{edwards2021text2mol}, molecular language models such as MolT5~\citep{edwards2022molt5} and BioT5~\citep{pei2023biot5}, graph-language systems such as MolCA~\citep{liu2023molca}, and multimodal biomedical pretraining such as KV-PLM~\citep{zeng2022kvplm}. Graphormer~\citep{ying2021graphormer} and Uni-Mol~\citep{zhou2023unimol} are important molecular representation baselines, though not direct text-query retrieval systems without additional alignment. MoleculeLens is complementary: it emphasizes scaffold-disjoint drug--mechanism retrieval and auditable substructure-level explanations rather than maximum-capacity generation.
 
-\paragraph{Graph and language baselines.}
-Transformer architectures for graphs have become standard baselines for molecular prediction, with Graphormer as a representative example~\citep{ying2021graphormer}. More recent 3D molecular pretraining systems such as Uni-Mol~\citep{zhou2023unimol} are important context for molecular representation learning, although they are not direct text-query retrieval baselines without an additional text-alignment head. In parallel, text encoders pretrained on scientific or biomedical corpora such as SciBERT~\citep{beltagy2019scibert} have influenced biomedical retrieval systems and text-conditioned molecular models. Our setting differs from generic molecular property prediction: the task is cross-modal retrieval between drug structures and mechanism text under scaffold shift.
+\paragraph{Leakage, scaffold splits, and interpretability.}
+Scaffold splits are a standard guardrail against overoptimistic molecular generalization estimates~\citep{bemis1996frameworks}. We combine this with explicit drug-name and mechanism-only ablations because identity-bearing text fields can become shortcuts. The interpretability component is motivated by work on linear feature analysis and attribution graphs~\citep{bricken2023monosemanticity,templeton2024monosemanticity,lindsey2025attribution}, but the features here are not discovered post hoc: ECFP4 bits already correspond to labelled circular molecular environments~\citep{rogers2010ecfp} recoverable with RDKit~\citep{rdkit}.
 
-\paragraph{Evaluation leakage and scaffold splits.}
-Scaffold-based evaluation remains a standard strategy for reducing overoptimistic estimates in molecular machine learning~\citep{bemis1996frameworks}. In this work, scaffolds are derived from Bemis--Murcko frameworks and used to build train, validation, and test partitions over unique scaffolds rather than individual rows. The molecular side uses ECFP4 fingerprints~\citep{rogers2010ecfp} as a simple, strong structural representation. We also explicitly test the effect of removing drug names from the text because identity-bearing lexical fields can inflate retrieval scores without improving true structure--mechanism grounding.
+\section{Benchmark and Method}
 
-\paragraph{Mechanistic interpretability of representation spaces.}
-Mechanistic interpretability has become an active area of research for understanding what features neural networks learn. Bricken et al.~\citep{bricken2023monosemanticity} showed that sparse autoencoders (SAEs) can recover monosemantic features from superimposed polysemantic representations in transformer residual streams. Templeton et al.~\citep{templeton2024monosemanticity} scaled this approach to frontier language models, identifying millions of interpretable features in Claude 3 Sonnet. Lindsey et al.~\citep{lindsey2025attribution} extended this to attribution graphs, providing causal accounts of specific model behaviors by tracing feature-to-feature influence. Our work adapts these ideas to a cross-modal contrastive retrieval setting. Rather than analysing a transformer residual stream, we analyse the 256-dimensional shared embedding space produced by two linear projection heads, and rather than token-level features, we decode back to ECFP4 molecular substructures~\citep{rogers2010ecfp} that have ground-truth chemical semantics via RDKit~\citep{rdkit}.
-
-\section{Benchmark and Task}
-
-\subsection{ChEMBL Drug--Mechanism Pairs}
-
-The benchmark is constructed from ChEMBL~\citep{zdrazil2024chembl}. Starting from the mechanism endpoint, we keep approved drugs only by filtering for \texttt{max\_phase=4} and molecular mechanisms with valid mechanism text. Canonical SMILES strings are fetched for each drug, and target metadata are joined through the ChEMBL target endpoint. After filtering invalid or incomplete entries, the final eligible dataset contains 2,699 drug--text pairs spanning 1,196 unique Bemis--Murcko scaffolds.
-
-Each example contains a drug structure and a text description. The molecular side is represented by canonical SMILES and later converted into ECFP4 fingerprints. The text side is a concatenation of mechanism of action, target name, action type, and drug name:
+\paragraph{Dataset and task.}
+We construct the benchmark from ChEMBL~\citep{zdrazil2024chembl} by filtering for approved drugs (\texttt{max\_phase=4}), valid mechanism text, and parseable canonical SMILES. The final dataset contains 2,699 drug--text pairs spanning 1,196 unique Bemis--Murcko scaffolds. The primary text field concatenates mechanism of action, target name, action type, and drug name:
 \begin{equation}
-\texttt{text\_rich} = \texttt{mechanism} + \texttt{target} + \texttt{action} + \texttt{drug}.
+\texttt{text\_rich}=\texttt{mechanism}+\texttt{target}+\texttt{action}+\texttt{drug}.
 \end{equation}
-This formulation is intentionally rich because the benchmark is designed both to measure retrieval accuracy and to expose sensitivity to lexical cues such as explicit drug-name mentions.
+The main split uses seed 0 over unique scaffolds: 2,019 train examples, 245 validation examples, and 435 held-out test examples whose scaffolds are unseen during training. We report text-query retrieval against a molecule gallery using single-label diagonal Recall@1, MRR, Recall@5, and Recall@10 for apples-to-apples comparison with baselines. Appendix~\ref{app:benchmark} gives additional evaluation details, including the parent-structure handling used for attribution analyses.
 
-\subsection{Retrieval Setup}
-\label{sec:retrieval-setup}
-
-The task is bidirectional retrieval: given a text query, retrieve the matching drug structure from a gallery, and given a structure query, retrieve the matching text. We report full-gallery Recall@1, MRR, Recall@5, and Recall@10 in the text-query direction (text as query, drug-structure gallery). This direction aligns naturally with the attribution and logit-lens analyses in Sections~7--8.
-
-\paragraph{Evaluation protocol.}
-All primary retrieval comparisons in this paper use single-label (diagonal) evaluation: a retrieval is correct if and only if the exact matching row is returned at rank~1. This ensures a consistent, apples-to-apples comparison across all models, since per-example retrieval scores are not available for MolPrompt and KV-PLM and therefore multi-label metrics cannot be computed for them.
-
-\paragraph{Multi-label note.}
-Several drugs appear under multiple mechanism rows because ChEMBL records each target--action pair separately. Diagonal evaluation is therefore slightly pessimistic: retrieving a different mechanism row of the same physical drug is not a model failure. Of 435 test rows, 193 belong to 76 parent structures with multiple mechanism rows after RDKit \texttt{FragmentParent} standardisation. The attribution analyses in Section~7 account for this by identifying same-parent-structure pairs from standardized SMILES and using parent-normalized identifiers where appropriate.
-
-\subsection{Scaffold Split}
-
-The main evaluation uses a saved scaffold manifest built over unique Bemis--Murcko scaffolds with seed 0. The resulting split contains 2,019 training examples, 245 validation examples, and 435 held-out test examples. The key design choice is that the test molecules belong to scaffolds not seen during training, which makes the benchmark substantially harder than the earlier global split and better aligned with the intended generalization claim.
-
-\section{Method}
+\paragraph{Model.}
+For drug $i$, RDKit computes a radius-2, 2048-bit ECFP4 fingerprint $x_i$~\citep{rogers2010ecfp}. For text $i$, a frozen biomedical sentence encoder produces a CLS-style embedding $z_i$. MoleculeLens learns only two linear projection heads:
+\begin{equation}
+b_i^{(m)} = W_m x_i + b_m,\qquad b_i^{(t)}=W_t z_i+b_t,
+\end{equation}
+followed by $L_2$ normalization and cosine scoring. Training uses symmetric InfoNCE with same-target weighting and a hardest-same-target margin term. The scaffold model uses batch size 512, learning rate $10^{-3}$, weight decay $10^{-4}$, temperature 0.07, margin 0.1, and 100 epochs. All encoders are frozen; only $W_m,b_m,W_t,b_t$ are trained. Architecture and implementation details are in Appendix~\ref{app:architecture}.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.82\linewidth]{fig_architecture.pdf}
-  \caption{%
-    \textbf{MoleculeLens architecture.}
-    Two frozen encoders produce fixed-dimensional representations that are
-    aligned via learned linear projection heads in a shared 256-dimensional space.
-    \textit{Left (Molecule Branch):} A drug SMILES string is converted to a
-    2048-bit ECFP4 fingerprint by RDKit (non-parametric; no gradient flows through
-    this step). The fingerprint is projected by the learned $W_m \in \mathbb{R}^{256 \times 2048}$
-    and $\ell_2$-normalised to yield $\hat{b}_i^{(m)}$.
-    \textit{Right (Text Branch):} The mechanism text is encoded by a frozen
-    S-Biomed-RoBERTa (12 transformer layers, 768-d hidden), CLS-pooled to $z_i$,
-    projected by $W_t \in \mathbb{R}^{256 \times 768}$, and $\ell_2$-normalised to
-    yield $\hat{b}_i^{(t)}$.
-    Both embeddings meet in the shared 256-d space where cosine similarity
-    $s_{ij} = \hat{b}_i^{(m)} \cdot \hat{b}_j^{(t)}$ is computed.
-    The model is trained with a symmetric InfoNCE loss augmented with
-    same-target weighting and a margin term.
-    The \textit{only trained parameters} are the linear projection heads
-    $W_m$, $b_m$, $W_t$, $b_t$ (dashed yellow group; weights and biases of
-    the two \texttt{nn.Linear} layers); all encoders are frozen throughout.
-    \textit{Left annotation (Track~1):} Because $W_m$ is linear, the
-    closed-form linear saliency $\mathrm{attr}_k = [W_m^\top \hat{b}_j^{(t)}]_k$
-    maps any retrieval decision back to individual ECFP4 bits and
-    hence to atoms in the molecular graph (linear approximation; see \S7.1).
-    \textit{Right annotation (Track~3):} The contrastive logit lens applies
-    $W_t$ at each of the 12 RoBERTa layers to track where drug-retrievable
-    information emerges with depth.
-  }
-  \label{fig:architecture}
+  \includegraphics[width=0.78\linewidth]{fig_architecture.pdf}
+  \caption{\textbf{MoleculeLens architecture.} Frozen ECFP4 and biomedical text encoders are connected by learned linear projection heads. The molecule-side linear map enables direct ECFP4-bit saliency; the text-side projection is reused for the layer-wise logit-lens diagnostic.}
+  \label{fig:architecture-main}
 \end{figure}
 
-\subsection{Linear Contrastive Bridge}
+\section{Retrieval Results}
+\label{sec:results}
 
-MoleculeLens uses a deliberately simple dual-encoder design. Rather than training large cross-modal encoders end-to-end, it starts from fixed unimodal representations and learns only lightweight projection heads into a shared embedding space.
-
-For molecules, we compute ECFP4 fingerprints with radius 2 and 2,048 bits~\citep{rogers2010ecfp}. For text, we encode \texttt{text\_rich} with a frozen biomedical sentence encoder and use the CLS-style pooled representation. Let $x_i \in \mathbb{R}^{2048}$ denote the molecular fingerprint for drug $i$ and $z_i \in \mathbb{R}^{d_t}$ the frozen text embedding. MoleculeLens learns linear projections
-\begin{equation}
-b_i^{(m)} = W_m x_i, \qquad b_i^{(t)} = W_t z_i,
-\end{equation}
-where both projected embeddings live in a 256-dimensional shared space and are $L_2$ normalized before scoring.
-
-\subsection{Training Objective}
-
-Training uses a symmetric contrastive loss over matched drug--text pairs. Given a minibatch of projected text embeddings $B^{(t)}$ and molecular embeddings $B^{(m)}$, similarities are computed with a temperature-scaled cosine form:
-\begin{equation}
-s_{ij} = \frac{\langle \hat{b}_i^{(t)}, \hat{b}_j^{(m)} \rangle}{\tau}.
-\end{equation}
-The loss combines bidirectional InfoNCE with two modifications used in the current codebase: same-target weighting for hard negatives that share a target label, and a margin term against the hardest same-target negative in the minibatch. This keeps the model lightweight while biasing training toward fine-grained distinctions among pharmacologically similar drugs.
-
-\section{Experimental Setup}
-
-\subsection{Baselines}
-
-We compare MoleculeLens against four families of baselines already present in the experimental repository.
-
-\begin{itemize}
-\item \textbf{MoleculeSTM (zero-shot):} an earlier molecular structure--text model~\citep{liu2023moleculestm} evaluated from prior head-to-head runs.
-\item \textbf{Graphormer (zero-shot):} a graph-based baseline evaluated on the aligned scaffold split.
-\item \textbf{MolPrompt:} a trained retrieval baseline on the same held-out ChEMBL-style split.
-\item \textbf{KV-PLM:} a biomedical language-model baseline that encodes both structure strings and text in a shared representation~\citep{zeng2022kvplm}.
-\end{itemize}
-
-We also retain the earlier \textbf{Thin Bridges (Global)} result as a reference point. That setting uses the earlier full-gallery train=test protocol and should be interpreted as a memorization-heavy upper-bound reference rather than as the main scientific comparison.
-
-\subsection{Implementation Notes}
-
-The current scaffold model uses batch size 512, learning rate $10^{-3}$, weight decay $10^{-4}$, temperature 0.07, margin 0.1, and 100 training epochs. The molecular encoder is nonparametric ECFP4, while the text encoder is frozen and only the projection heads are trained. We retain a separately retrained no-drug condition for the baseline comparison tables, but the mechanistic leakage analysis in Section~7.4 uses a stricter \emph{same-model} ablation: the rich model is held fixed and only the \texttt{Drug: X.} span is removed at inference time. All experiments run on a single NVIDIA GPU; training the linear projection heads requires under 30 seconds per run, and the ECFP4 attribution and contrastive logit-lens analyses each complete in under 10 minutes.
-
-\section{Results}
-
-\subsection{Primary Retrieval Comparison}
-
-Table~\ref{tab:main-results} shows the main comparison. MoleculeLens achieves the strongest Recall@1 and MRR among the held-out scaffold models, improving on MolPrompt by roughly ten Recall@1 points and on KV-PLM by seventeen Recall@1 points (all models: single-label diagonal evaluation). The zero-shot Graphormer baseline performs near chance on this retrieval task. For additional context, we also include available full-gallery reference runs for MolPrompt and KV-PLM. These results suggest that the thin-bridge design remains competitive when evaluated on unseen scaffolds rather than on the earlier full-gallery setup.
+Table~\ref{tab:main-results} shows the main comparison. MoleculeLens has the strongest scaffold-split Recall@1 and MRR among the evaluated cross-modal baselines, improving Recall@1 over MolPrompt by 9.6 points and over KV-PLM by 17.0 points. MolPrompt has higher Recall@5/10, so the claim is not leaderboard dominance: MoleculeLens is strongest at top-rank retrieval while remaining competitive at broader candidate coverage. Full-gallery rows are included only as context; the Thin Bridges global result is a memorization-heavy reference, not the main scientific comparison.
 
 \begin{table}[t]
 \centering
 \small
-\caption{Primary retrieval comparison. All models use single-label (diagonal) evaluation for consistent apples-to-apples comparison. Full-gallery rows are included for context only; the held-out scaffold rows are the main scientific comparison.}
+\caption{Primary retrieval comparison. All rows use single-label diagonal evaluation. Full-gallery rows are context only; scaffold rows are the main comparison.}
 \label{tab:main-results}
 \begin{tabular}{l l c c c c}
 \toprule
-Model & Eval Set & Recall@1 & MRR & Recall@5 & Recall@10 \\
+Model & Eval set & R@1 & MRR & R@5 & R@10 \\
 \midrule
-MoleculeSTM (zero-shot) & Full gallery ($N{=}2699$) & 0.089 & 0.171 & 0.243 & 0.337 \\
-Thin Bridges (Global) & Full gallery ($N{=}2699$) & 0.747 & 0.849 & 0.985 & 0.997 \\
-MolPrompt (Global) & Full gallery ($N{=}2699$) & 0.123 & 0.264 & 0.405 & 0.590 \\
-KV-PLM (Global) & Full gallery ($N{=}2699$) & 0.015 & 0.038 & 0.044 & 0.074 \\
-Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.015 & 0.011 & 0.025 \\
-\textbf{MoleculeLens (ours)} & Scaffold test ($N{=}435$) & \textbf{0.225} & \textbf{0.304} & 0.384 & 0.462 \\
-MolPrompt & Scaffold test ($N{=}435$) & 0.129 & 0.256 & \textbf{0.400} & \textbf{0.531} \\
-KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
+MoleculeSTM (zero-shot) & Full ($N{=}2699$) & 0.089 & 0.171 & 0.243 & 0.337 \\
+Thin Bridges (Global) & Full ($N{=}2699$) & 0.747 & 0.849 & 0.985 & 0.997 \\
+MolPrompt (Global) & Full ($N{=}2699$) & 0.123 & 0.264 & 0.405 & 0.590 \\
+KV-PLM (Global) & Full ($N{=}2699$) & 0.015 & 0.038 & 0.044 & 0.074 \\
+Graphormer (zero-shot) & Scaffold ($N{=}435$) & 0.002 & 0.015 & 0.011 & 0.025 \\
+\textbf{MoleculeLens} & Scaffold ($N{=}435$) & \textbf{0.225} & \textbf{0.304} & 0.384 & 0.462 \\
+MolPrompt & Scaffold ($N{=}435$) & 0.129 & 0.256 & \textbf{0.400} & \textbf{0.531} \\
+KV-PLM & Scaffold ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Two points matter for interpretation. First, the global Thin Bridges result remains much higher than every other full-gallery or scaffold-disjoint result, which reinforces that the earlier setting should be viewed as a reference rather than a fair main comparison. Second, MolPrompt attains stronger Recall@10 than MoleculeLens on the scaffold split, suggesting that MoleculeLens is better at placing the correct match near the top of the list but may still lose ground on broader candidate coverage.
-
-Because the task is cross-modal, Table~\ref{tab:main-results} is restricted to methods that score text queries against molecular representations. Same-modality text lookup controls are not included as competing baselines because they access gallery text rather than molecular structure. Instead, we audit lexical shortcutting through the no-drug-name ablation and the stricter same-model perturbation analysis in Section~7.4.
-
-To directly test whether the target and action fields create a partial target-identity lookup signal, we additionally train MoleculeLens on \texttt{mechanism\_of\_action} alone, removing the target name, action type, and explicit drug field. This mechanism-only ablation reaches Recall@1 $=0.124$ and MRR $=0.226$ on the same 435-pair scaffold test set (Table~\ref{tab:mechanism-only}). The drop from the rich-text model (0.225 to 0.124) confirms that target/action metadata contributes useful signal, but the mechanism-only result remains well above chance and close to the MolPrompt scaffold Recall@1 of 0.129.
+\paragraph{Text-field and leakage controls.}
+Because \texttt{text\_rich} includes target/action metadata and an explicit drug field, we report three complementary controls in Table~\ref{tab:controls}. Removing only the drug field and retraining gives R@1~=~0.110, a 51.0\% relative drop. Holding the rich model fixed and removing only \texttt{Drug: X.} at inference gives R@1~=~0.067, a stricter 70.4\% same-model causal diagnostic. Training on mechanism text alone, removing target name, action type, and explicit drug name, gives R@1~=~0.124 and MRR~=~0.226. Thus target/action fields contribute real signal, but mechanism-only retrieval remains nontrivial and close to MolPrompt scaffold R@1.
 
 \begin{table}[t]
 \centering
 \small
-\caption{MoleculeLens text-field ablation on the canonical scaffold split. The mechanism-only row removes target name, action type, and explicit drug name.}
-\label{tab:mechanism-only}
-\begin{tabular}{l c c c c}
-\toprule
-Text condition & Recall@1 & MRR & Recall@5 & Recall@10 \\
-\midrule
-\texttt{text\_rich} & 0.225 & 0.304 & 0.384 & 0.462 \\
-\texttt{mechanism\_of\_action} only & 0.124 & 0.226 & 0.331 & 0.453 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Bootstrap 95\% confidence intervals for the scaffold test set ($N{=}435$) are reported in Table~\ref{tab:bootstrap-ci}. For MoleculeLens the CI is computed by exact bootstrap resampling (10,000 iterations) of per-example retrieval scores. For other models, where per-example scores are unavailable, the Wilson score interval for the Recall@1 proportion is reported. The non-overlapping CIs between MoleculeLens (text\_rich) $[0.186, 0.267]$ and MolPrompt $[0.101, 0.164]$ confirm that the Recall@1 gap is statistically reliable despite the modest test-set size.
-
-\begin{table}[t]
-\centering
-\small
-\caption{Bootstrap 95\% confidence intervals for Recall@1 on the scaffold test set ($N{=}435$).
-All Recall@1 values are in the text-query direction (text as query, drug structure gallery).
-MoleculeLens CIs are from exact bootstrap resampling (10,000 iterations);
-other models use the Wilson score interval.}
-\label{tab:bootstrap-ci}
+\caption{Key controls on the canonical scaffold split. Confidence intervals are 95\% intervals for Recall@1; MoleculeLens uses exact bootstrap resampling and other baselines use Wilson intervals.}
+\label{tab:controls}
 \begin{tabular}{l c c c}
 \toprule
-Model & Recall@1 & 95\% CI (lo) & 95\% CI (hi) \\
+Condition & R@1 & MRR & R@1 95\% CI \\
 \midrule
-MoleculeLens (text\_rich)   & 0.225 & 0.186 & 0.267 \\
-MoleculeLens (text\_nodrug) & 0.110 & 0.083 & 0.140 \\
-MoleculeLens (text\_nodrug, same-model) & 0.067 & 0.044 & 0.092 \\
-MolPrompt                   & 0.129 & 0.101 & 0.164 \\
-KV-PLM                      & 0.055 & 0.037 & 0.081 \\
-Graphormer (zero-shot)      & 0.002 & 0.000 & 0.012 \\
+MoleculeLens \texttt{text\_rich} & 0.225 & 0.304 & [0.186, 0.267] \\
+MoleculeLens retrained no-drug & 0.110 & -- & [0.083, 0.140] \\
+MoleculeLens same-model no-name & 0.067 & -- & [0.044, 0.092] \\
+MoleculeLens mechanism-only & 0.124 & 0.226 & -- \\
+MolPrompt scaffold & 0.129 & 0.256 & [0.101, 0.164] \\
+KV-PLM scaffold & 0.055 & 0.121 & [0.037, 0.081] \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-To further assess split-dependent variance, we re-run MoleculeLens with five independent Bemis-Murcko scaffold splits (seeds 0--4). All 2{,}699 drug texts are encoded once; only the linear projection heads ($W_m$, $W_t$) are retrained per seed (${\approx}22$\,s each). Note that these multi-seed runs use a simplified InfoNCE objective (no same-target weighting or margin term) and a 90/10 train--test partition without a held-out validation set; they are therefore best interpreted as a \emph{partition-sensitivity analysis} with a comparable proxy model rather than as a direct replication of the main scaffold training protocol. Table~\ref{tab:multiseed} reports per-seed results along with the mean and standard deviation. Recall@1 varies between 0.175 and 0.285 (mean $0.213 \pm 0.045$), reflecting genuine difficulty variation across different scaffold partitions rather than model instability. The drug-name leakage drop ranges from 2.4\% (seed~2) to 34.8\% (seed~4), indicating that some splits happen to place more name-disambiguated pairs in the test set. Figure~\ref{fig:robustness} summarises all three robustness analyses in a single panel.
+The non-overlapping Recall@1 intervals for MoleculeLens \texttt{text\_rich} and MolPrompt support the reliability of the top-rank improvement despite the 435-example test set. Five additional scaffold splits with a simplified proxy objective give R@1 $0.213\pm0.045$, and a five-seed full-loss spot check using the same seeds 0--4 gives R@1 $0.277\pm0.081$; full per-seed tables and the robustness figure are in Appendix~\ref{app:robustness}. The three leakage numbers answer different questions: the 51.0\% retrained drop is the fairest model-comparison number, the 70.4\% same-model drop is the causal diagnostic for the fixed rich model, and the 22.9\% multi-seed proxy mean measures partition sensitivity rather than canonical leakage.
 
-Because the five-seed table is intentionally a fast proxy, we also run a five-seed direct check with the full MoleculeLens loss: same-target weighting plus the hardest-same-target margin term used by the main model. These were the same consecutive seeds 0--4 used in the proxy analysis and were selected before evaluating the full-loss results. This full-loss check uses the same cached frozen embeddings and independent 90/10 scaffold splits. Table~\ref{tab:full-loss-multiseed} shows that the complete-loss model is not less stable than the proxy: R@1 ranges from 0.203 to 0.407, with mean $0.277 \pm 0.081$. The result does not replace the canonical seed-0 scaffold split, but it directly addresses whether the simplified proxy was artificially inflating robustness; if anything, the full-loss check is stronger.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_robustness.pdf}
+\caption{\textbf{Statistical robustness summary.} Bootstrap intervals, multi-seed scaffold variance, and per-seed drug-name leakage drops show that the main Recall@1 gap is statistically reliable while leakage varies with scaffold partition.}
+\label{fig:robustness-main}
+\end{figure}
+
+\section{Substructure-Level Saliency}
+
+The implemented score is
+\begin{equation}
+s_{ij}=\hat{b}_i^{(m)}\cdot\hat{b}_j^{(t)}
+=\mathrm{normalize}(W_m x_i+b_m)\cdot\mathrm{normalize}(W_t z_j+b_t).
+\end{equation}
+Because $W_m$ is linear, we use the closed-form ECFP4 saliency proxy
+\begin{equation}
+\label{eq:attribution}
+\mathrm{attr}_k(i,j)=\bigl[W_m^\top\hat{b}_j^{(t)}\bigr]_k,
+\end{equation}
+where $\hat{b}_j^{(t)}=\mathrm{normalize}(W_tz_j+b_t)$. Equation~\ref{eq:attribution} is a fast ranking proxy rather than an exact causal decomposition: the exact normalized score also depends on the molecule-side bias and $\|W_mx_i+b_m\|$. We therefore validate it directly against exact gradients and exact leave-one-present-bit-out score drops over all 435 scaffold test pairs.
 
 \begin{table}[t]
 \centering
 \small
-\caption{Multi-seed scaffold split variance for MoleculeLens (text\_rich and text\_nodrug).
-Five independent Bemis-Murcko splits; only linear projection heads are retrained per seed.
-Leakage drop\,(\%) $= (R@1_\text{rich} - R@1_\text{nodrug}) / R@1_\text{rich} \times 100$.}
+\caption{Validation of Equation~\ref{eq:attribution}. All statistics are over present ECFP4 bits. The final rows test drug-specificity using distinct-drug pairs with identical no-drug text.}
+\label{tab:attr-validation}
+\begin{tabular}{l c}
+\toprule
+Metric & Value \\
+\midrule
+Mean Pearson(attr, exact gradient) & 0.905 \\
+Mean Pearson(attr, exact bit-drop) & 0.947 \\
+Mean top-10 Jaccard(attr, exact bit-drop) & 0.710 \\
+Incorrect Rank-1 pairs: Pearson(attr, bit-drop) & 0.970 \\
+Incorrect Rank-1 pairs: top-10 Jaccard & 0.761 \\
+Identical no-drug text: mean exact top-10 Jaccard & 0.136 \\
+Identical no-drug text: non-identical exact top-10 sets & 952/954 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:attr-validation} supports rank-based use of the saliency proxy. It tracks the exact normalized-score gradient strongly and the exact bit-drop score even more closely. The identical-text test addresses a key conceptual concern: the exact top-10 bit-drop sets are almost never identical across distinct drugs sharing the same no-drug query, so the implemented normalized score is strongly drug-specific. The proxy also remains faithful for failed retrievals, which means incorrect predictions remain auditable decisions of the learned scoring function rather than cases where the attribution method collapses. Appendix~\ref{app:attribution} provides additional case studies and aggregate bit statistics.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_molecular_lens.pdf}
+  \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Atoms are colour-coded by attribution value and paired with top-bit bar charts, showing that high-saliency bits often align with mechanism-relevant pharmacophoric regions.}
+  \label{fig:molecular-lens-main}
+\end{figure}
+
+\paragraph{Same-model leakage attribution.}
+We next ask whether the same rich model uses the same substructures when the explicit drug name is removed at inference. For each test pair, let $\mathcal{T}^{\mathrm{rich}}_i$ and $\mathcal{T}^{\mathrm{nodrug}}_i$ be the top-10 saliency-bit sets under the original query and the same query with \texttt{Drug: X.} removed. We compute
+\begin{equation}
+J_i=\frac{|\mathcal{T}^{\mathrm{rich}}_i\cap\mathcal{T}^{\mathrm{nodrug}}_i|}{|\mathcal{T}^{\mathrm{rich}}_i\cup\mathcal{T}^{\mathrm{nodrug}}_i|}.
+\end{equation}
+Mean overlap is only $0.356\pm0.161$; 82/435 pairs have $J_i<0.2$, 36/435 have $J_i>0.6$, and 13/435 are leakage candidates that are correct under \texttt{text\_rich}, wrong under the same-model no-name query, and have $J_i<0.2$. This converts the score-level leakage drop into a structural claim: for a substantial subset of test pairs, removing the name changes which molecular features drive retrieval even though model weights are fixed.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_leakage_substructure.pdf}
+  \caption{\textbf{Same-model drug-name ablation shifts salient substructures.} Removing only the explicit drug-name span from the query changes top-saliency ECFP4 bits for many test pairs; Cetrorelix acetate illustrates a low-overlap leakage candidate.}
+  \label{fig:leakage-main}
+\end{figure}
+
+\section{Contrastive Logit Lens}
+
+We adapt the logit-lens idea~\citep{voss2020logitlens} by applying the trained text projection head $W_t$ to the CLS state at each S-Biomed-RoBERTa layer. The diagnostic exactly replays the main rich model at layer 12: the reconstructed embeddings match the saved outputs within $1.21\times10^{-3}$ maximum absolute error and recover R@1~=~0.225. Layers 0--11 are near chance for both rich and retrained no-drug text (R@1 between 0.002 and 0.011), while layer 12 jumps to R@1~=~0.225 for \texttt{text\_rich} and 0.113 for \texttt{text\_nodrug}. This is best viewed as a descriptive sanity check: retrieval signal and the rich-vs-no-name gap both appear in the final contextualized CLS representation, not gradually across intermediate layers. The full layer table, family breakdown, and attention visualizations are in Appendix~\ref{app:logit-lens}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_logit_lens.pdf}
+  \caption{\textbf{Contrastive logit lens across RoBERTa layers.} Retrieval is near chance until the final transformer layer, where both rich retrieval signal and the no-name gap emerge.}
+  \label{fig:logit-lens-main}
+\end{figure}
+
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+MoleculeLens is not a claim that frozen ECFP4 plus a linear bridge solves scaffold-generalized drug--text retrieval. Its narrower contribution is that a lightweight model remains competitive at top-rank scaffold retrieval while making its decisions inspectable at the ECFP4-substructure level. The saliency proxy is validated against exact score-derived quantities, remains faithful on retrieval failures, and exposes same-model drug-name leakage as a shift in salient molecular features.
+
+The benchmark has important limitations. The rich text field includes target and action metadata, and the mechanism-only ablation confirms that these fields contribute retrieval signal; the rich-text result should therefore be interpreted as curated mechanism-metadata retrieval rather than pure free-text mechanism understanding. The dataset covers FDA-approved drugs with curated ChEMBL mechanisms and does not establish generalization to investigational compounds or non-ChEMBL prose. Finally, the baseline set does not include adapted MolT5, BioT5, Uni-Mol, MolCA, or chemistry-LLM retrieval systems; these require nontrivial task adaptation and remain important future comparisons.
+
+\section{Conclusion}
+
+On a 2,699-pair ChEMBL benchmark with scaffold-disjoint evaluation, MoleculeLens outperforms MolPrompt and KV-PLM on Recall@1 and MRR while clearly exposing the role of lexical and target/action metadata. Its central value is interpretability: the linear molecular bridge yields a validated, efficient ECFP4 saliency lens that can audit correct matches, failed retrievals, and same-model leakage. This makes MoleculeLens a useful foundation for future work on stronger encoders, text-identifiability audits, and feature-level analysis of drug--text alignment.
+
+
+\clearpage
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\newpage
+\appendix
+
+\section{Additional Benchmark and Evaluation Details}
+\label{app:benchmark}
+
+The primary retrieval direction is text query to molecule gallery because this is the direction used by the attribution and logit-lens analyses. All main-table rows use single-label diagonal evaluation: a prediction is counted correct only when the exact matching row is returned. This is intentionally conservative for drugs with multiple ChEMBL mechanism rows, but it is the only consistent apples-to-apples protocol for baselines where per-example ranked lists are not available.
+
+Several test drugs appear under multiple target--action rows. For attribution analyses, same-drug and wrong-but-close filtering use RDKit \texttt{FragmentParent} standardisation over SMILES to avoid treating salt or formulation variants as independent structures. In the canonical scaffold test set, 193 of 435 rows belong to 76 parent structures with multiple mechanism rows.
+
+\section{Architecture and Implementation Details}
+\label{app:architecture}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.82\linewidth]{fig_architecture.pdf}
+  \caption{\textbf{MoleculeLens architecture.} A fixed ECFP4 molecule representation and a frozen biomedical text encoder are aligned by learned linear projection heads in a 256-dimensional shared space. Only the linear heads are trained; the encoders remain frozen. The molecule-side linear map enables the ECFP4 saliency proxy used in the main text, while the text-side projection head is reused for the contrastive logit-lens diagnostic.}
+  \label{fig:architecture}
+\end{figure}
+
+The model trains for 100 epochs with batch size 512, learning rate $10^{-3}$, weight decay $10^{-4}$, temperature 0.07, and margin 0.1. Training the projection heads takes under 30 seconds per run on a single NVIDIA GPU. ECFP4 attribution and contrastive logit-lens analyses each complete in under 10 minutes.
+
+\section{Robustness Details}
+\label{app:robustness}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Multi-seed scaffold split variance for MoleculeLens using the simplified proxy objective. Five independent Bemis--Murcko splits are used; only linear projection heads are retrained per seed. Leakage drop is $(R@1_\text{rich}-R@1_\text{nodrug})/R@1_\text{rich}$.}
 \label{tab:multiseed}
 \begin{tabular}{r r r r r r r}
 \toprule
-Seed & $n_\text{test}$ & R@1 (rich) & R@5 (rich) & R@10 (rich) & MRR (rich) & Leakage drop (\%) \\
+Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR & Leakage drop \\
 \midrule
-0 & 403 & 0.191 & 0.377 & 0.459 & 0.287 & 29.9 \\
-1 & 261 & 0.226 & 0.479 & 0.544 & 0.342 & 20.3 \\
-2 & 224 & 0.188 & 0.393 & 0.496 & 0.296 &  2.4 \\
-3 & 221 & 0.285 & 0.525 & 0.634 & 0.402 & 27.0 \\
-4 & 395 & 0.175 & 0.352 & 0.446 & 0.269 & 34.8 \\
+0 & 403 & 0.191 & 0.377 & 0.459 & 0.287 & 29.9\% \\
+1 & 261 & 0.226 & 0.479 & 0.544 & 0.342 & 20.3\% \\
+2 & 224 & 0.188 & 0.393 & 0.496 & 0.296 &  2.4\% \\
+3 & 221 & 0.285 & 0.525 & 0.634 & 0.402 & 27.0\% \\
+4 & 395 & 0.175 & 0.352 & 0.446 & 0.269 & 34.8\% \\
 \midrule
-\textbf{Mean} & -- & \textbf{0.213} & \textbf{0.425} & \textbf{0.516} & \textbf{0.319} & \textbf{22.9} \\
-\textbf{Std}  & -- & 0.045 & 0.070 & 0.073 & 0.053 & 12.6 \\
+\textbf{Mean} & -- & \textbf{0.213} & \textbf{0.425} & \textbf{0.516} & \textbf{0.319} & \textbf{22.9\%} \\
+\textbf{Std}  & -- & 0.045 & 0.070 & 0.073 & 0.053 & 12.6\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[t]
+\begin{table}[h]
 \centering
 \small
-\caption{Five-seed full-loss check. Unlike Table~\ref{tab:multiseed}, these runs use the same same-target weighting and hardest-same-target margin term as the main MoleculeLens model. Seeds 0--4 were selected as the same consecutive seed set used by the proxy analysis before evaluating full-loss results.}
+\caption{Five-seed full-loss check. These runs use the same same-target weighting and hardest-same-target margin term as the main MoleculeLens model. Seeds 0--4 were selected as the same consecutive seed set used by the proxy analysis before evaluating full-loss results.}
 \label{tab:full-loss-multiseed}
 \begin{tabular}{r r r r r r}
 \toprule
@@ -282,177 +278,33 @@ Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[h]
 \centering
 \includegraphics[width=\linewidth]{fig_robustness.pdf}
-\caption{\textbf{Statistical robustness of MoleculeLens.}
-\textbf{(A)} Bootstrap 95\,\% confidence intervals (10,000 resamples) for Recall@1 on the scaffold test set.
-Non-overlapping intervals between MoleculeLens (text\_rich) and MolPrompt confirm statistical reliability.
-\textbf{(B)} Multi-seed Recall@1 stability across five independent Bemis-Murcko scaffold splits.
-Dashed lines and shaded bands show mean $\pm$ 1\,std; $n_\text{test}$ labels report test-set sizes.
-\textbf{(C)} Per-seed drug-name leakage drop (percentage), showing split-dependent variation; the
-mean drop of $22.9\,\%$ is consistent across the five runs.}
+\caption{\textbf{Statistical robustness of MoleculeLens.} Bootstrap intervals, multi-seed scaffold variance, and per-seed drug-name leakage drops.}
 \label{fig:robustness}
 \end{figure}
 
-\subsection{Drug-Name Leakage}
-\label{sec:results}
+\section{Additional Attribution Analyses}
+\label{app:attribution}
 
-Table~\ref{tab:leakage-results} reports the \emph{retrained} no-drug comparison used for apples-to-apples model benchmarking: each method is evaluated after removing explicit drug names from the text and recomputing its no-name retrieval outputs. As expected, all text-aware models degrade to some extent. The important comparison is between the old global Thin Bridges setup and the new scaffold model. The global Thin Bridges setting drops by 80.5\% relative Recall@1, while global KV-PLM drops by 65.0\% and scaffold MoleculeLens drops by 51.0\%. MolPrompt and scaffold KV-PLM show similarly substantial relative drops of 44.6\% and 37.5\%, respectively. This does not eliminate leakage, but it suggests that scaffold-disjoint evaluation plus a lighter bridge produces a less brittle retrained model than the earlier memorization-heavy setup. Section~7.4 then asks the stricter causal question by holding the rich MoleculeLens model fixed and removing the drug name only at inference.
+For each test pair, we compute Equation~\ref{eq:attribution}, restrict to ECFP4 bits present in the molecule, rank bits by absolute saliency, and decode top-ranked bits with RDKit. Among eight correctly retrieved examples spanning antibacterial, antiviral, nuclear-receptor, opioid, sulfonamide, and diagnostic-agent mechanisms, the highest-saliency bits correspond to pharmacophoric or mechanism-defining regions such as steroid cores, sulfonamide groups, nucleoside analogue motifs, beta-lactam rings, and iodinated benzoate rings.
 
-\begin{table}[t]
-\centering
-\small
-\caption{Drug-name leakage ablation measured with Recall@1. All rows use retrained no-drug outputs for comparability across models; Section~7.4 reports the stricter same-model ablation for MoleculeLens only.}
-\label{tab:leakage-results}
-\begin{tabular}{l l c c c c}
-\toprule
-Model & Eval Set & With Drug & No Drug & Abs.\ Drop & \% Drop \\
-\midrule
-MoleculeSTM (zero-shot) & Full gallery ($N{=}2699$) & 0.089 & 0.014 & 0.074 & 83.8 \\
-Thin Bridges (Global) & Full gallery ($N{=}2699$) & 0.747 & 0.145 & 0.601 & 80.5 \\
-KV-PLM (Global) & Full gallery ($N{=}2699$) & 0.015 & 0.005 & 0.010 & 65.0 \\
-Graphormer (zero-shot) & Scaffold test ($N{=}435$) & 0.002 & 0.005 & -0.002 & --- \\
-\textbf{MoleculeLens (ours)} & Scaffold test ($N{=}435$) & \textbf{0.225} & \textbf{0.110} & \textbf{0.115} & \textbf{51.0} \\
-MolPrompt & Scaffold test ($N{=}435$) & 0.129 & 0.071 & 0.057 & 44.6 \\
-KV-PLM & Scaffold test ($N{=}435$) & 0.055 & 0.034 & 0.021 & 37.5 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The Graphormer row is at chance level and the relative drop is not meaningful (shown as ---). A full-gallery no-drug MolPrompt run is not available; only the scaffold MolPrompt leakage row is reported. The more relevant observation is that every meaningful text-aware model benefits from drug-name cues, which confirms that lexical leakage remains a central evaluation issue for drug--text retrieval.
-
-The three leakage-related numbers used in this paper answer different questions and should not be read interchangeably. Table~\ref{tab:leakage-reconciliation} reconciles them directly. For model comparison, the retrained no-drug drop of 51.0\% is the fairest number because every model is evaluated in its own no-name condition. For causal diagnosis of the fixed rich model, the same-model 70.4\% drop is the relevant number because the weights are held fixed and only the input text is perturbed. The 22.9\% multi-seed value is not a canonical leakage estimate; it measures how leakage varies across independent scaffold partitions in a simplified proxy model.
-
-\begin{table}[t]
-\centering
-\small
-\caption{Reconciliation of the three drug-name leakage numbers.}
-\label{tab:leakage-reconciliation}
-\begin{tabular}{p{0.33\linewidth} c p{0.42\linewidth}}
-\toprule
-Quantity & R@1 drop & Interpretation \\
-\midrule
-Retrained no-drug scaffold row & 51.0\% & Benchmarking number; comparable across models. \\
-Same-model no-name perturbation & 70.4\% & Causal diagnostic for the fixed rich MoleculeLens model. \\
-Five-seed proxy mean & 22.9\% & Partition-sensitivity diagnostic, not the canonical leakage estimate. \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Mechanistic Interpretability: ECFP4 Bit Attribution}
-
-\subsection{Why Linear Projections Enable Closed-Form Attribution}
-
-A distinguishing property of MoleculeLens is that both projection heads are purely linear: $W_m \in \mathbb{R}^{256 \times 2048}$ and $W_t \in \mathbb{R}^{256 \times 768}$ contain no nonlinearities. This makes it possible to compute a closed-form linear saliency score for any retrieval decision, attributing individual ECFP4 bits without sampling or gradient estimation. The approach is directly inspired by attribution graph methods for transformer circuits~\citep{lindsey2025attribution}, but is considerably simpler because the bridge has no hidden layers.
-
-The similarity between drug $i$ and text $j$ in the implemented shared space is:
-\begin{equation}
-s_{ij} = \hat{b}_i^{(m)} \cdot \hat{b}_j^{(t)} = \mathrm{normalize}(W_m x_i + b_m) \cdot \mathrm{normalize}(W_t z_j + b_t).
-\end{equation}
-Because $W_m$ is linear, we use the following fast saliency proxy for ECFP4 bit $k$ under text $j$:
-\begin{equation}
-\label{eq:attribution}
-\mathrm{attr}_k(i,j) = \bigl[W_m^\top \hat{b}_j^{(t)}\bigr]_k,
-\end{equation}
-where $\hat{b}_j^{(t)} = \mathrm{normalize}(W_t z_j + b_t)$ is the unit-normalized text embedding. This is the $k$-th component of the projection of the text embedding back through $W_m^\top$ into ECFP4 space. A positive value means that bit $k$---a specific radius-2 circular molecular substructure---pushes drug $i$ towards the text query in the shared space; a negative value pushes it away. Equation~\ref{eq:attribution} requires only a single matrix--vector product regardless of the number of bits or the embedding dimension. It is therefore a \emph{linear saliency approximation}: the exact normalized score depends on both the molecule-side bias and the denominator $\|W_m x_i + b_m\|$, so Equation~\ref{eq:attribution} should be interpreted as a fast ranking proxy rather than an exact causal decomposition.
-
-ECFP4 bits have pre-existing chemical semantics via the Morgan algorithm~\citep{rogers2010ecfp}: each bit corresponds to a unique circular atom environment of radius at most 2, recoverable from any SMILES string using RDKit~\citep{rdkit}. Saliency scores from Equation~\ref{eq:attribution} can therefore be decoded directly to atoms and bonds in the molecular graph, enabling visualization of which substructures the model treats as important for each retrieval decision. No sparse autoencoder or post-hoc concept probe is required; the features are already labelled before any training.
-
-\subsection{Validation of the Linear Saliency Approximation}
-
-We validate Equation~\ref{eq:attribution} directly on all 435 held-out scaffold pairs against two exact quantities derived from the implemented score: (i) the exact gradient of $s_{ii}$ with respect to the continuous fingerprint vector $x_i$, and (ii) the exact leave-one-present-bit-out score drop obtained by flipping each active ECFP4 bit from 1 to 0 while holding all other bits fixed. All correlations are computed only over bits present in the molecule, since absent bits cannot contribute discretely to the binary fingerprint.
-
-\begin{table}[t]
-\centering
-\small
-\caption{Validation of Equation~\ref{eq:attribution} on 435 scaffold test pairs. All statistics are computed over present ECFP4 bits only. The final two rows evaluate drug-specificity on 954 pairs of distinct drugs that share identical \texttt{text\_nodrug} queries.}
-\label{tab:attr-validation}
-\begin{tabular}{l c}
-\toprule
-Metric & Value \\
-\midrule
-Mean Pearson($\mathrm{attr}$, exact gradient) & 0.905 \\
-Median Pearson($\mathrm{attr}$, exact gradient) & 0.959 \\
-Mean Pearson($\mathrm{attr}$, exact bit-drop score) & 0.947 \\
-Median Pearson($\mathrm{attr}$, exact bit-drop score) & 0.979 \\
-Mean top-10 Jaccard ($\mathrm{attr}$ vs exact bit-drop) & 0.710 \\
-Identical \texttt{text\_nodrug} pairs: mean exact top-10 Jaccard & 0.136 \\
-Identical \texttt{text\_nodrug} pairs: non-identical exact top-10 sets & 952 / 954 (99.8\%) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:attr-validation} shows that the linear proxy is empirically faithful enough to support rank-based interpretation: the mean present-bit Pearson correlation is 0.905 against the exact gradient and 0.947 against the exact bit-drop score, while the mean top-10 overlap with the exact bit-drop ranking is 0.710. The final two rows address the concern that the proxy is purely text-driven. Even when two distinct drugs share \emph{identical} \texttt{text\_nodrug} queries, the exact top-10 bit-drop sets are almost never identical (952 of 954 pairs differ), with mean Jaccard overlap only 0.136. The exact normalized score is therefore strongly drug-specific even under identical text, and Equation~\ref{eq:attribution} serves as a computationally cheap proxy for that drug-specific ranking.
-
-\subsection{Experimental Setup}
-
-We implement Equation~\ref{eq:attribution} on the 435 held-out scaffold test pairs. For each pair $(i, j{=}i)$, we compute the saliency vector $\mathrm{attr}(\cdot, i) \in \mathbb{R}^{2048}$, restrict attention to ECFP4 bits that are actually present in drug $i$ (bits with $x_{i,k} = 1$), and rank those bits by $|\mathrm{attr}_k|$. We then use RDKit's \texttt{FindAtomEnvironmentOfRadiusN} to decode the top-$K$ bits back to atom sets and overlay them on a 2D depiction of the molecule, coloured green for positive saliency (pushes towards text) and red for negative saliency (pushes away). For the leakage analysis, we hold the rich model fixed and compare \texttt{text\_rich} against the same text with the \texttt{Drug: X.} span removed at inference time.
-
-\subsection{Case Studies: Attribution for Correctly Retrieved Pairs}
-
-Of 435 test pairs, 98 (22.5\%) are correctly retrieved at Recall@1 under \texttt{text\_rich}. We select eight correctly retrieved pairs spanning distinct mechanism families for detailed case study:
-
-\begin{itemize}
-  \item \textbf{Methacycline hydrochloride} (bacterial 70S ribosome inhibitor): the tetracyclic core and the enamine side chain receive the highest positive attributions, consistent with the chelation motif required for ribosome binding.
-  \item \textbf{Hydrocortisone} (glucocorticoid receptor agonist): the fused steroid ring system and the $\Delta^4$-3-keto group dominate attribution, matching the known pharmacophore for nuclear receptor binding.
-  \item \textbf{Methyltestosterone} (androgen receptor agonist): similar to hydrocortisone but with attribution concentrated on the C-17 methyl modification that distinguishes androgen from glucocorticoid selectivity.
-  \item \textbf{Fentanyl citrate} ($\mu$-opioid receptor agonist): the 4-anilidopiperidine core and the phenethyl group are the highest-attribution fragments, mirroring the classical opioid pharmacophore defined for $\mu$-receptor engagement.
-  \item \textbf{Ganciclovir sodium} (human herpesvirus 1 DNA polymerase inhibitor): the guanine base and the acyclic sugar mimic carry the largest attributions, consistent with the nucleoside analogue mechanism of chain termination.
-  \item \textbf{Cefmenoxime hydrochloride} (bacterial penicillin-binding protein inhibitor): the $\beta$-lactam ring and the cephalosporin scaffold receive the highest attributions, in line with the irreversible acylation mechanism of this drug class.
-  \item \textbf{Mafenide acetate} (bacterial dihydropteroate synthase inhibitor): the sulfonamide group dominates, consistent with DHPS inhibition as the competitive mechanism of all sulfonamide antibacterials.
-  \item \textbf{Iothalamate meglumine} (diagnostic agent): the triiodinated benzoate ring system receives uniformly high attributions, consistent with the iodine density being the structurally unique feature of X-ray contrast agents.
-\end{itemize}
-
-In every case, the highest-attribution substructures correspond to pharmacophoric or mechanism-defining regions of the molecule as established by prior medicinal chemistry literature. This confirms that the shared space has organised itself around chemically meaningful features rather than scaffold memorisation artefacts.
-
-Correct examples are not the only setting where the saliency calculation is well behaved. We stratify the validation metrics from Section~7.1 by retrieval outcome in Table~\ref{tab:incorrect-attribution}. The approximation remains highly faithful on failed retrievals: among the 337 pairs not retrieved at Rank~1, the mean Pearson correlation against exact bit-drop scores is 0.970 and the mean top-10 Jaccard overlap is 0.761. For the 234 harder misses with rank greater than 10, these values increase to 0.987 and 0.828. This does not mean every failed retrieval is chemically correct; rather, it shows that failures are still interpretable decisions of the learned scoring function, not cases where the attribution proxy itself becomes unstable.
-
-\begin{table}[t]
-\centering
-\small
-\caption{Attribution fidelity stratified by retrieval outcome. Metrics compare Equation~\ref{eq:attribution} against exact leave-one-present-bit-out score drops.}
-\label{tab:incorrect-attribution}
-\begin{tabular}{l r c c}
-\toprule
-Subset & $n$ & Pearson vs bit-drop & Top-10 Jaccard vs bit-drop \\
-\midrule
-Correct at Rank~1 & 98 & 0.869 & 0.535 \\
-Incorrect at Rank~1 & 337 & 0.970 & 0.761 \\
-Rank $>10$ misses & 234 & 0.987 & 0.828 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig_molecular_lens.pdf}
-  \caption{%
-    \textbf{MoleculeLens: closed-form ECFP4 linear saliency for four correctly retrieved drug--text pairs.}
-    Each panel shows a 2D molecular depiction with atoms colour-coded by their ECFP4 attribution value
-    (green = pushes drug embedding toward the matched mechanism text; red = pushes away from it),
-    alongside a horizontal bar chart of the top-12 attributed ECFP4 bits present in the molecule.
-    \textbf{(A)} Mafenide acetate (bacterial DHPS inhibitor): the sulfonamide group dominates, consistent with DHPS inhibition as the competitive mechanism of all sulfonamide antibacterials.
-    \textbf{(B)} Carbamazepine (sodium channel blocker): the dibenzazepine tricyclic core receives the highest attributions.
-    \textbf{(C)} Albuterol (\(\beta_2\)-adrenergic receptor agonist): attributions concentrate on the catecholamine pharmacophore, the minimal structural unit for \(\beta\)-receptor recognition.
-    \textbf{(D)} Acyclovir sodium (herpesvirus DNA polymerase inhibitor): the guanine base and acyclic sugar mimic carry the largest attributions, consistent with the nucleoside analogue chain-termination mechanism.
-    Saliency is computed in closed form as $\mathrm{attr}_k(i,j) = [W_m^\top \hat{b}_j^{(t)}]_k$, a single matrix--vector product (linear approximation; see \S7.1).
-  }
+  \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Atoms are colour-coded by ECFP4 attribution value and paired with top-bit bar charts.}
   \label{fig:molecular-lens}
 \end{figure}
 
-\subsection{Aggregate Attribution Across All Test Pairs}
-
-To characterise which ECFP4 substructures are universally important across the full test set, we identify, for each of the 435 test pairs, the ten present bits with the highest absolute attribution, then count how often each bit appears in those top-10 sets across all pairs. Table~\ref{tab:universal-bits} lists the ten most frequently appearing bits.
-
-\begin{table}[t]
+\begin{table}[h]
 \centering
 \small
-\caption{Most universally important ECFP4 bits across 435 test pairs. Frequency is the number of test pairs for which the bit appears in the top-10 attribution ranking. Mean attribution is averaged over all pairs where the bit is present.}
+\caption{Most frequent high-saliency ECFP4 bits across 435 test pairs. Frequency is the number of test pairs for which the bit appears in the top-10 attribution ranking.}
 \label{tab:universal-bits}
 \begin{tabular}{c c c}
 \toprule
-Bit index & Frequency (of 435) & Mean attribution \\
+Bit index & Frequency & Mean attribution \\
 \midrule
 1538 & 85 (19.5\%) & 0.228 \\
 1380 & 74 (17.0\%) & 0.004 \\
@@ -468,132 +320,47 @@ Bit index & Frequency (of 435) & Mean attribution \\
 \end{tabular}
 \end{table}
 
-Bit 1538 is the single most universally important feature, appearing in the top-10 for 85 pairs (19.5\%) with a substantially higher mean attribution (0.228) than any other bit. RDKit decoding confirms that bit 1538 corresponds to a benzene ring environment with at least one heteroatom substituent at radius 2, which is a common pharmacophore anchor across kinase inhibitors, GPCR ligands, and ion channel blockers---the three largest drug families in our test set. The frequency drops steeply after the top five bits, indicating that no small set of substructures dominates universally. Rather, most attributions are specific to particular mechanism--scaffold combinations, which is the expected signature of a model that has learned cross-modal structure rather than collapsed onto a few global shortcuts.
+Bit 1538 is the most frequent high-saliency feature, appearing in the top-10 for 85 pairs. RDKit decoding maps it to a benzene-ring environment with at least one heteroatom substituent at radius 2, a common pharmacophore anchor across several major test-set families. The frequency drops sharply after the top few bits, indicating that no small universal shortcut dominates the saliency landscape.
 
-\subsection{Leakage Attribution: Does the Attribution Pattern Change When Drug Names Are Removed?}
-
-The retrained no-drug comparison in Section~\ref{sec:results} isolates what performance remains after learning without explicit names. Here we ask a stricter mechanistic question: if the \emph{same rich model} is held fixed and the \texttt{Drug: X.} span is removed only at inference time, does the set of molecular substructures driving retrieval change? Under this same-model ablation, Recall@1 drops from 0.225 to 0.067 (70.4\% relative), indicating that the rich model relies heavily on lexical identity cues at test time.
-
-We quantify this as the Jaccard overlap of the top-10 saliency bits between the \texttt{text\_rich} query and the same-model no-name query for each drug $i$:
-\begin{equation}
-J_i = \frac{|\mathcal{T}^{\mathrm{rich}}_i \cap \mathcal{T}^{\mathrm{nodrug}}_i|}{|\mathcal{T}^{\mathrm{rich}}_i \cup \mathcal{T}^{\mathrm{nodrug}}_i|},
-\end{equation}
-where $\mathcal{T}^{\mathrm{cond}}_i$ denotes the set of top-10 attribution bits for drug $i$ under condition \texttt{cond}. High $J_i$ means the same substructures are important under both conditions, consistent with genuine mechanism-driven retrieval. Low $J_i$ means the attribution pattern shifts when the name is removed, consistent with the model exploiting name-correlated structural features under \texttt{text\_rich}.
-
-Table~\ref{tab:leakage-attr} summarises the results across all 435 test pairs.
-
-\begin{table}[t]
-\centering
-\small
-\caption{Attribution stability under drug-name removal. $J_i$ is the Jaccard overlap of top-10 attribution bits between \texttt{text\_rich} and \texttt{text\_nodrug} projections for the same drug. Low $J_i$ indicates that attribution pattern changed when drug name was removed, consistent with leakage-driven retrieval.}
-\label{tab:leakage-attr}
-\begin{tabular}{l c}
-\toprule
-Metric & Value \\
-\midrule
-Mean Jaccard overlap $\bar{J}$ & 0.356 $\pm$ 0.161 \\
-Pairs with $J_i < 0.2$ (leakage-driven) & 82 / 435 (18.9\%) \\
-Pairs with $J_i > 0.6$ (mechanism-stable) & 36 / 435 (8.3\%) \\
-Leakage candidates (correct rich, wrong nodrug, $J_i < 0.2$) & 13 / 435 (3.0\%) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The mean Jaccard overlap of 0.356 is still far below 1.0, indicating that removing the explicit drug-name field from the query causes a substantial shift in which molecular substructures the fixed rich model treats as important. Roughly one in five test pairs falls in the low-overlap zone ($J_i < 0.2$), while only 8.3\% of pairs retain high overlap above 0.6. The effect is therefore less extreme than in the earlier confounded rich-vs-retrained comparison, but it survives when model weights are held fixed and is consequently easier to interpret causally.
-
-We identify 13 \emph{leakage candidates}: pairs where (i) retrieval is correct at Rank~1 under \texttt{text\_rich}, (ii) retrieval fails under the same-model no-name query, and (iii) $J_i < 0.2$. For these drugs, the molecular substructures that made retrieval possible under the full text are not the same ones that the fixed model considers important once the explicit name cue is removed. Figure~\ref{fig:leakage} shows a representative case, \textsc{Cetrorelix acetate}, where the saliency pattern changes markedly under the same-model ablation.
-
-This analysis reframes the name-removal drop in mechanistic terms: the leakage is not merely a retrieval-score artefact but is reflected in a concrete, substructure-level shift in what drives the alignment. Because the model weights are fixed, this shift cannot be attributed to differences between separately trained projections.
-
-\begin{figure}[t]
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig_leakage_substructure.pdf}
-  \caption{%
-    \textbf{Same-model drug-name ablation shifts the salient substructures.}
-    \textbf{(A)} Distribution of Jaccard overlap between the top-10 attribution bits under
-    \texttt{text\_rich} and the same-model \texttt{text\_nodrug} query across all 435 test pairs.
-    The mean overlap of 0.356 and the 82 pairs in the low-overlap zone ($J < 0.2$, shaded)
-    indicate that a substantial subset of test-pair saliency patterns are not stable under explicit
-    drug-name removal, even when the rich model is held fixed.
-    \textbf{(B, C)} Case study for Cetrorelix acetate (GnRH receptor antagonist), a leakage candidate
-    with $J = 0.11$.
-    Under \texttt{text\_rich} (panel B, correct Rank-1 retrieval) and the same-model no-name query
-    (panel C, wrong retrieval), the top saliency bits and highlighted atoms shift substantially.
-    Molecule depictions in the insets show the corresponding atom-level colour coding.
-    The shift in saliency fingerprint provides structural-level evidence that the fixed rich model exploits
-    explicit name cues under the full text condition.
-  }
+  \caption{\textbf{Same-model drug-name ablation shifts salient substructures.} The distribution of Jaccard overlaps shows that 82 test pairs fall below $J<0.2$; the Cetrorelix acetate example illustrates how saliency changes when the explicit name is removed.}
   \label{fig:leakage}
 \end{figure}
 
-\subsection{Summary of Interpretability Findings}
+\section{Contrastive Logit-Lens Details}
+\label{app:logit-lens}
 
-The analyses above establish the following:
-
-\begin{enumerate}
-  \item \textbf{The linear saliency proxy is faithful to the exact score.} Present-bit correlation with the exact gradient is 0.905 on average, and correlation with exact bit-drop scores is 0.947, which is strong enough to justify rank-based use of Equation~\ref{eq:attribution}.
-  \item \textbf{Attributions are chemically meaningful and stable to retrieval failure.} For eight correctly retrieved case studies spanning diverse mechanism families, the highest-saliency ECFP4 bits decode to pharmacophore-relevant atoms and bonds rather than scaffold-memorisation artefacts. For incorrect Rank-1 retrievals, the saliency proxy remains highly aligned with exact bit-drop scores (mean Pearson 0.970), indicating that failed retrievals remain auditable.
-  \item \textbf{No single substructure dominates universally.} The most frequent bit (1538) appears in the top-10 for only 19.5\% of test pairs, indicating distributed and mechanism-specific saliency patterns across the test set.
-  \item \textbf{Drug-name leakage is visible at the substructure level.} Under a same-model ablation, the mean Jaccard overlap between top-saliency bits under \texttt{text\_rich} and \texttt{text\_nodrug} is only 0.356, and 82 pairs fall below 0.2. The 70.4\% same-model Recall@1 drop maps onto a concrete shift in which molecular features the model treats as important.
-\end{enumerate}
-
-Together, these results justify the MoleculeLens name: the linear projection design literally functions as a lens into every retrieval decision, enabling closed-form substructure-level inspection with a single matrix--vector product per query while remaining anchored to the exact normalized score by explicit validation.
-
-\section{Contrastive Logit Lens: Where Drug-Retrievable Information Emerges}
-
-\subsection{Motivation and Setup}
-
-The logit lens~\citep{voss2020logitlens} applies the final unembedding matrix of a language model at each intermediate layer to ask how token predictions evolve with depth. We introduce an analogous technique for cross-modal contrastive retrieval. Rather than unembedding to a vocabulary, we apply the trained projection $W_t \in \mathbb{R}^{256 \times 768}$ at each position $\ell \in \{0, 1, \ldots, 12\}$ of the frozen S-Biomed-RoBERTa encoder:
-\begin{equation}
-\hat{b}^{(t)}_{\ell,i} = \mathrm{normalize}\!\left(W_t\, h^{(\ell)}_{i,\mathrm{CLS}} + b_t\right) \in \mathbb{R}^{256},
-\end{equation}
-where $h^{(\ell)}_{i,\mathrm{CLS}}$ is the CLS hidden state at layer $\ell$ for text $i$ (layer 0 is the token embedding, layers 1--12 are transformer blocks). We then compute full-gallery Recall@1 at each layer against the fixed drug embeddings $B^{(m)}$. This produces a \emph{layer-emergence curve} that asks: at what depth does the text representation become drug-retrievable?
-
-We run this for both \texttt{text\_rich} and a retrained \texttt{text\_nodrug} control. The layer where the two curves first diverge localises where the no-name control departs from the rich-text representation.
-
-\subsection{Results: Drug-Retrievable Information Crystallises at the Final Layer}
-
-Figure~\ref{fig:logit-lens} and Table~\ref{tab:logit-lens} summarise the results across 435 test pairs. Unlike the earlier draft, the current contrastive logit lens exactly reproduces the saved \texttt{text\_rich} scaffold model at layer~12: it uses the same tokenizer length (96 tokens), the same rich projection head, and the same molecule gallery as the main evaluation. The reconstructed layer-12 rich embeddings match the saved outputs to within a max absolute difference of $1.21 \times 10^{-3}$ and recover the same layer-12 Recall@1 of 0.225. For the no-name comparison, the \texttt{text\_nodrug} curve follows the paper's retrained fixed-gallery control rather than the stricter same-model ablation used in Section~7.4: the rich molecule gallery is held fixed while the separately trained no-drug text head is applied at each layer. The reconstructed no-drug layer-12 text embeddings match the saved outputs to within $3.99 \times 10^{-4}$ max absolute error and yield R@1~=~0.113, close to the retrained 0.110 fixed-gallery row in Table~\ref{tab:leakage-results}.
-
-\begin{table}[t]
+\begin{table}[h]
 \centering
 \small
-\caption{Recall@1 and MRR at key RoBERTa layers under both text conditions. Layers 0--11 carry essentially no drug-retrievable signal; all meaningful retrieval ability is concentrated in layer~12.}
+\caption{Recall@1 and MRR at key RoBERTa layers under both text conditions. Layers 0--11 carry essentially no drug-retrievable signal; meaningful retrieval appears at layer 12.}
 \label{tab:logit-lens}
 \begin{tabular}{c c c c c c}
 \toprule
-Layer & \multicolumn{2}{c}{text\_rich} & \multicolumn{2}{c}{text\_nodrug} & Leakage gap \\
+Layer & \multicolumn{2}{c}{text\_rich} & \multicolumn{2}{c}{text\_nodrug} & Gap \\
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
- & R@1 & MRR & R@1 & MRR & (R@1) \\
+ & R@1 & MRR & R@1 & MRR & R@1 \\
 \midrule
-0 (embed) & 0.002 & 0.016 & 0.007 & 0.018 & --0.005 \\
-3         & 0.007 & 0.018 & 0.002 & 0.016 & 0.005 \\
-6         & 0.002 & 0.016 & 0.002 & 0.016 & 0.000 \\
-9         & 0.002 & 0.016 & 0.005 & 0.017 & --0.002 \\
-11        & 0.011 & 0.030 & 0.011 & 0.037 & 0.000 \\
-\textbf{12} & \textbf{0.225} & \textbf{0.304} & \textbf{0.113} & \textbf{0.199} & \textbf{0.113} \\
+0 & 0.002 & 0.016 & 0.007 & 0.018 & --0.005 \\
+3 & 0.007 & 0.018 & 0.002 & 0.016 & 0.005 \\
+6 & 0.002 & 0.016 & 0.002 & 0.016 & 0.000 \\
+9 & 0.002 & 0.016 & 0.005 & 0.017 & --0.002 \\
+11 & 0.011 & 0.030 & 0.011 & 0.037 & 0.000 \\
+12 & \textbf{0.225} & \textbf{0.304} & \textbf{0.113} & \textbf{0.199} & \textbf{0.113} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The primary finding is descriptive rather than surprising: \textbf{drug-retrievable information is almost entirely concentrated in the final transformer layer~(layer~12)}. Layers 0 through 11 produce Recall@1 values at or near chance (0.002--0.011 for \texttt{text\_rich}, 0.002--0.011 for the retrained \texttt{text\_nodrug} control). Only at layer 12 does a large discontinuous jump occur: \texttt{text\_rich} reaches R@1~$= 0.225$, MRR~$= 0.304$; \texttt{text\_nodrug} reaches R@1~$= 0.113$, MRR~$= 0.199$. The 0.113 gap is also concentrated at layer~12 --- earlier layers show only negligible fluctuations around zero (between $-0.005$ and $0.005$).
-
-This is not a failure mode but an architectural consequence of how RoBERTa builds sentence-level representations. The CLS token in RoBERTa does not carry meaningful global information until the deepest layers, where multi-head attention has fully aggregated context from the whole sequence. Intermediate CLS states represent early, context-incomplete views of the first token. The contrastive logit lens makes this concrete: applying $W_t$ at shallow layers is equivalent to asking ``is the embedding-layer CLS token drug-retrievable?'' --- the answer is no, because it has not yet seen the mechanism text.
-
-\textbf{In this retrained-control diagnostic, the no-name gap appears at the same layer as the signal.} Since both the retrieval signal and the rich-vs-no-name gap appear only at layer~12, this diagnostic is at least consistent with the idea that both depend on the final contextualized CLS representation. We treat this as a descriptive localization result rather than a strong claim about mitigation strategies.
-
-\subsection{Per-Mechanism-Family Analysis}
-
-Table~\ref{tab:logit-lens-family} shows peak Recall@1 at layer~12 broken down by mechanism family. All families peak at layer~12, further confirming the single-layer emergence pattern. However, peak performance varies substantially by family.
-
-\begin{table}[t]
+\begin{table}[h]
 \centering
 \small
-\caption{Peak Recall@1 at layer~12 by mechanism family (text\_rich). All families peak at the final layer; variation reflects how stereotyped the mechanism text is within each family.}
+\caption{Peak Recall@1 at layer 12 by mechanism family under \texttt{text\_rich}.}
 \label{tab:logit-lens-family}
 \begin{tabular}{l c c}
 \toprule
-Mechanism family & $n$ & Recall@1 (layer 12) \\
+Mechanism family & $n$ & R@1 \\
 \midrule
 Nuclear Receptor agonist/antagonist & 18 & 0.611 \\
 Kinase inhibitor & 11 & 0.545 \\
@@ -608,94 +375,19 @@ Other & 165 & 0.152 \\
 \end{tabular}
 \end{table}
 
-Nuclear receptor ligands (steroids, retinoids, androgens) reach R@1~$= 0.611$ at layer~12. These drugs share highly stereotyped mechanism text (e.g., ``Glucocorticoid receptor agonist Target: Glucocorticoid receptor'') and distinct steroid scaffolds that map cleanly to mechanism categories. Kinase inhibitors (0.545), antiviral nucleoside analogues (0.533), and antibacterials (0.440) are similarly stereotyped. GPCRs, the largest family at 129 examples, achieve 0.271 --- lower than the smaller high-signal families because GPCR subtypes (adrenergic, opioid, dopamine, serotonin) share similar mechanism text and scaffold motifs, making within-family confusion common.
-
-\subsection{Attention Analysis at Layer 12}
-
-To understand what tokens the CLS representation attends to when drug-retrievable information crystallises, we extract attention weights at layer~12 for eight correctly retrieved examples under both conditions.
-
-Under \texttt{text\_rich}, CLS attention at layer~12 is distributed across structural tokens (\texttt{<s>}, \texttt{</s>}, \texttt{.}) and drug-name subword tokens (e.g., \textit{ĠEX}, \textit{IST} for Exenatide; \textit{ĠHUM} for Calcitonin Human). Under \texttt{text\_nodrug}, the same structural tokens remain attended but the drug-name tokens are absent; attention redistributes to mechanism words (\textit{AGONIST}, \textit{ANTAGONIST}, \textit{INHIBITOR}) and structural field tokens (\textit{ĠTarget}, \textit{ĠAction}). This provides token-level evidence for the mechanism by which drug-name leakage operates: the final-layer CLS representation incorporates drug-name subword tokens directly when they are present, partially bypassing pure mechanism encoding.
-
-\begin{figure}[t]
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig_logit_lens.pdf}
-  \caption{%
-    \textbf{Contrastive logit lens: drug-retrievable information across RoBERTa layers.}
-    \textbf{(A)} Recall@1 vs.\ RoBERTa layer for \texttt{text\_rich} (blue) and \texttt{text\_nodrug} (red).
-    Both conditions are at chance (R@1 $\approx 0.002$) for layers 0--11 and jump sharply at layer~12,
-    where \texttt{text\_rich} reaches $0.225$ and \texttt{text\_nodrug} reaches $0.113$.
-    The grey shading shows the leakage gap; the entire gap of 0.113 is concentrated at the final layer.
-    \textbf{(B)} Per-layer leakage gap (R@1 rich $-$ R@1 nodrug): the bar at layer~12 is coloured red
-    (exceeds 0.03 threshold); all other layers are below threshold.
-    \textbf{(C)} Distribution of the first layer at which each drug is correctly retrieved,
-    split by whether the drug is in the final correct set (blue) or not (orange).
-    Correct retrievals almost exclusively ``lock in'' at layer~12, while the few
-    intermediate-layer hits for incorrect drugs are noise.
-  }
+  \caption{\textbf{Contrastive logit lens across RoBERTa layers.} Retrieval is near chance until the final transformer layer, where both rich retrieval signal and the no-name gap emerge.}
   \label{fig:logit-lens}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig_logit_lens_detail.pdf}
-  \caption{%
-    \textbf{Logit lens detail: per-family emergence heatmap and layer-12 CLS attention.}
-    \textbf{(A)} Heatmap of Recall@1 at each RoBERTa layer for each mechanism family
-    (\texttt{text\_rich}). Rows are ordered by descending final-layer performance.
-    The cell value at layer~12 is annotated directly; all other layers are at or near zero.
-    Nuclear receptor ligands achieve the highest retrieval (R@1~$=0.611$) due to stereotyped
-    mechanism text and structurally distinct steroid scaffolds; kinase inhibitors are the
-    next strongest family at 0.545.
-    GPCRs, the largest family ($n=129$), reach only 0.271 because GPCR subtypes share
-    similar mechanism text across hundreds of structurally related ligands.
-    \textbf{(B)--(E)} CLS token attention weights at layer~12 for four correctly retrieved
-    drugs spanning different families (Exenatide, Atenolol, Hydrocortisone, Ibuprofen sodium).
-    Each drug is shown under both \texttt{text\_rich} (blue, top row) and \texttt{text\_nodrug}
-    (orange, bottom row). The top-8 tokens by attention weight are displayed after removing
-    special tokens (\texttt{<s>}, \texttt{</s>}).
-    Under \texttt{text\_rich}, attention distributes across punctuation, field delimiters, and
-    drug-name subword tokens.
-    Under \texttt{text\_nodrug}, drug-name tokens are absent and attention shifts toward
-    mechanism tokens (\textit{AGONIST}, \textit{ANTAGONIST}, \textit{INHIBITOR}) and
-    structural field markers (\textit{Target}, \textit{Action}).
-    This provides token-level evidence that drug-name leakage operates by directly incorporating
-    drug-name subword representations into the final CLS embedding.
-  }
+  \caption{\textbf{Logit-lens detail.} Family-level layer-12 retrieval and CLS attention examples under rich and no-drug text conditions.}
   \label{fig:logit-lens-detail}
 \end{figure}
-
-\subsection{Interpretation}
-
-The contrastive logit lens is best interpreted as a descriptive diagnostic rather than as a primary contribution. It reveals a property of the frozen S-Biomed-RoBERTa encoder that the standard evaluation (using only the final-layer representation) cannot see: the encoder does not progressively build drug-retrievable representations across layers. Instead, nearly all retrieval signal appears at depth~12. This has two implications for MoleculeLens.
-
-First, it means that the frozen encoder is functioning as a \emph{whole}: the value of the 12-layer depth is the final contextualized representation, not a progressive enrichment that could be tapped at intermediate layers. Using a shallower encoder (e.g., 6 layers) would likely produce near-chance retrieval.
-
-Second, in the retrained no-name control, it localises the rich-vs-no-name gap to the same final layer. This does not by itself rule out alternative mitigation strategies, but it does suggest that the relevant difference is tied to the fully contextualized CLS representation rather than to any shallow-layer signal.
-
-\section{Discussion}
-\label{sec:discussion}
-
-The current results support a deliberately narrow claim. We do not argue that MoleculeLens solves scaffold-generalized drug--text alignment. Instead, we argue that an interpretable linear dual-encoder remains competitive under a substantially stricter evaluation protocol and offers analyses that are unavailable in black-box alternatives.
-
-The mechanistic interpretability analysis in Section~7 strengthens and contextualises this claim in several ways. First, the approximation itself is empirically well behaved: the linear saliency proxy tracks the exact gradient strongly and the exact bit-drop score even more closely, while remaining strongly drug-specific under identical no-name texts. Second, the chemical validity of the case-study saliency maps rules out the simplest failure mode---that the model has latched onto scaffold-memorisation artefacts rather than mechanism-relevant substructures. Third, the incorrect-retrieval diagnostic shows that the saliency proxy remains faithful even when the model retrieves the wrong molecule, so attribution failures are not being hidden by the correct-only case studies. Fourth, the same-model Jaccard analysis provides a structural account of why removing drug names hurts retrieval: 82 test pairs fall below $J<0.2$, meaning the fixed model's saliency pattern changes materially when the explicit name cue is removed. The corresponding same-model Recall@1 drop is 70.4\%, which is larger than the retrained no-drug benchmarking drop of 51.0\% and the multi-seed proxy mean of 22.9\% because the three quantities measure different interventions (Table~\ref{tab:leakage-reconciliation}). These findings connect directly to prior work on mechanistic interpretability of neural representations~\citep{bricken2023monosemanticity,templeton2024monosemanticity,lindsey2025attribution}: the key enabling condition is the same as in that literature---linear structure makes labelled saliency analysis over source features tractable.
-
-Concerns about dataset size are addressed by the statistical validation in Section~\ref{sec:results}. Bootstrap 95\,\% confidence intervals (10,000 resamples) for Recall@1 are non-overlapping between MoleculeLens (text\_rich) $[0.186, 0.267]$ and MolPrompt $[0.101, 0.164]$, confirming that the performance gap is statistically reliable rather than a sampling artefact (Tables~\ref{tab:bootstrap-ci}--\ref{tab:multiseed}). Five independent scaffold splits (seeds 0--4) show a proxy-model mean Recall@1 of $0.213 \pm 0.045$, and the corresponding five-seed full-loss check gives $0.277 \pm 0.081$, indicating that the complete same-target-weighted objective does not reduce the observed robustness. The leakage drop ranges from 2.4\,\% to 34.8\,\% across proxy seeds, reflecting genuine variation in how many name-disambiguated pairs land in each test fold; the mean of 22.9\,\% is lower than the single-split 51.0\,\% drop in the leakage ablation table, reflecting that the canonical split contains an above-average proportion of name-disambiguated test pairs.
-
-At the same time, the benchmark still has clear limitations. The text field includes target and action metadata alongside mechanism descriptions, and the ablations show that explicit identity cues remain influential. The mechanism-only ablation confirms that removing target and action metadata reduces Recall@1 from 0.225 to 0.124, so the rich-text result should be interpreted as structure--text retrieval over curated mechanism metadata rather than pure free-text mechanism understanding. The same-model Jaccard overlap of 0.356 indicates that only a minority of retrieval decisions remain highly stable under explicit name removal, and even the scaffold model is therefore not immune to lexical shortcutting. The dataset covers FDA-approved drugs with curated mechanism text and is deliberately complete rather than sampled---every approved drug with a parseable SMILES string and non-empty mechanism description is included---but it remains domain-specific, and generalisation to unapproved compounds or non-mechanism text is an open question. We also do not claim to cover the full modern baseline space: large molecular language models and graph-language systems such as MolT5, BioT5, Uni-Mol, and MolCA are important future comparisons, but they require nontrivial task adaptation to this paired FDA-drug mechanism retrieval setting. Planned extensions include sparse autoencoder analysis of the 256-dimensional shared space to measure monosemanticity~\citep{templeton2024monosemanticity} and a cross-modal crosscoder that jointly reconstructs drug and text embeddings to identify shared alignment features versus text-only leakage features~\citep{lindsey2025attribution}.
-
-\section{Conclusion}
-
-MoleculeLens reframes Thin Bridges around the harder and more meaningful scaffold-split setting. On a ChEMBL benchmark with 2,699 approved-drug mechanism pairs, the scaffold model outperforms MolPrompt, KV-PLM, and a zero-shot Graphormer baseline on Recall@1 and MRR while remaining substantially below the earlier memorization-heavy global reference. The no-drug, mechanism-only, and same-model ablations show that lexical and target/action cues remain influential, so the strongest claims should be made about audited structure--text alignment rather than raw leaderboard dominance. Bootstrap confidence intervals, proxy five-seed variance experiments, and a five-seed full-loss check confirm that the Recall@1 advantage over MolPrompt is statistically reliable and not an artefact of a single fragile training run.
-
-The mechanistic interpretability analysis provides a structural account of the model's behaviour beyond aggregate metrics. The closed-form linear saliency formula---enabled by the linear projection design---tracks the exact normalized score closely, identifies pharmacophore-relevant substructures as the primary drivers of correct retrieval, and quantifies the extent to which 82 test pairs undergo low-overlap saliency shifts under a same-model drug-name ablation. Together, these findings justify the MoleculeLens name and the paper's interpretability framing: the linear bridge is not merely a design convenience but a prerequisite for tractable, substructure-level analysis.
-
-This makes MoleculeLens a better foundation for the next stage of the project: sparse autoencoder analysis of the shared embedding space~\citep{templeton2024monosemanticity} and cross-modal crosscoder analysis for causal feature identification~\citep{lindsey2025attribution}.
-
-\bibliographystyle{plainnat}
-\bibliography{refs}
-
-\newpage
-\appendix
 
 \section{Limitations and Future Work}
 
