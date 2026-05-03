@@ -363,7 +363,7 @@ Bit 1538 is the single most universally important feature, appearing in the top-
 
 \subsection{Leakage Attribution: Does the Attribution Pattern Change When Drug Names Are Removed?}
 
-The leakage ablation in Section~\ref{sec:results} shows that removing drug names from text reduces Recall@1 from 0.191 to 0.094. Attribution analysis allows us to ask a finer question: does the \emph{set of molecular substructures} that drives retrieval change when the drug name is removed? If the model under \texttt{text\_rich} is routing signal through name-correlated structural accidents (e.g., shared scaffolds among drugs whose names appear frequently in training text), the top-attribution ECFP4 bits should shift substantially when the name is removed.
+The leakage ablation in Section~\ref{sec:results} shows that removing drug names from text reduces Recall@1 from 0.209 to 0.110 (multi-label evaluation). Attribution analysis allows us to ask a finer question: does the \emph{set of molecular substructures} that drives retrieval change when the drug name is removed? If the model under \texttt{text\_rich} is routing signal through name-correlated structural accidents (e.g., shared scaffolds among drugs whose names appear frequently in training text), the top-attribution ECFP4 bits should shift substantially when the name is removed.
 
 We quantify this as the Jaccard overlap of the top-10 attribution bits between the \texttt{text\_rich} and \texttt{text\_nodrug} conditions for each drug $i$:
 \begin{equation}
