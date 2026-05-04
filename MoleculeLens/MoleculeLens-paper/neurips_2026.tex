@@ -65,7 +65,7 @@ followed by $L_2$ normalization and cosine scoring. Training uses symmetric Info
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.78\linewidth]{fig_architecture.pdf}
+  \includegraphics[width=\linewidth]{fig_architecture.pdf}
   \caption{\textbf{MoleculeLens architecture.} Frozen ECFP4 and biomedical text encoders are connected by learned linear projection heads. The molecule-side linear map enables direct ECFP4-bit saliency; the text-side projection is reused for the layer-wise logit-lens diagnostic.}
   \label{fig:architecture-main}
 \end{figure}
@@ -226,7 +226,7 @@ Several test drugs appear under multiple target--action rows. For attribution an
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.82\linewidth]{fig_architecture.pdf}
+  \includegraphics[width=\linewidth]{fig_architecture.pdf}
   \caption{\textbf{MoleculeLens architecture.} A fixed ECFP4 molecule representation and a frozen biomedical text encoder are aligned by learned linear projection heads in a 256-dimensional shared space. Only the linear heads are trained; the encoders remain frozen. The molecule-side linear map enables the ECFP4 saliency proxy used in the main text, while the text-side projection head is reused for the contrastive logit-lens diagnostic.}
   \label{fig:architecture}
 \end{figure}

@@ -65,7 +65,7 @@ followed by $L_2$ normalization and cosine scoring. Training uses symmetric Info
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.78\linewidth]{fig_architecture.pdf}
+  \includegraphics[width=\linewidth]{fig_architecture.pdf}
   \caption{\textbf{MoleculeLens architecture.} Frozen ECFP4 and biomedical text encoders are connected by learned linear projection heads. The molecule-side linear map enables direct ECFP4-bit saliency; the text-side projection is reused for the layer-wise logit-lens diagnostic.}
   \label{fig:architecture-main}
 \end{figure}
@@ -166,7 +166,12 @@ Table~\ref{tab:attr-validation} supports rank-based use of the saliency proxy. I
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{fig_molecular_lens.pdf}
-  \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Atoms are colour-coded by attribution value and paired with top-bit bar charts, showing that high-saliency bits often align with mechanism-relevant pharmacophoric regions.}
+  \caption{\textbf{ECFP4 linear saliency for four correctly retrieved pairs.}
+  Each panel has three columns.
+  \emph{Left:} molecule with atoms colour-coded by summed attribution (green pushes toward the text match; red pushes away).
+  \emph{Centre:} the ECFP4 circular environment for each of the top-6 bits; the blue atom is the center and light-blue atoms form its radius-$r$ neighborhood.
+  \emph{Right:} attribution scores; axis labels decode each bit as \texttt{[ar.|ring.]element\textendash neighbors\,(r=radius)}, where \texttt{ar.} = aromatic, \texttt{ring.} = non-aromatic ring, and radius is the circular neighborhood depth (0--2 bonds).
+  High-attribution substructures align with the expected pharmacophoric regions annotated in each panel.}
   \label{fig:molecular-lens-main}
 \end{figure}
 
@@ -226,7 +231,7 @@ Several test drugs appear under multiple target--action rows. For attribution an
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.82\linewidth]{fig_architecture.pdf}
+  \includegraphics[width=\linewidth]{fig_architecture.pdf}
   \caption{\textbf{MoleculeLens architecture.} A fixed ECFP4 molecule representation and a frozen biomedical text encoder are aligned by learned linear projection heads in a 256-dimensional shared space. Only the linear heads are trained; the encoders remain frozen. The molecule-side linear map enables the ECFP4 saliency proxy used in the main text, while the text-side projection head is reused for the contrastive logit-lens diagnostic.}
   \label{fig:architecture}
 \end{figure}
@@ -293,7 +298,7 @@ For each test pair, we compute Equation~\ref{eq:attribution}, restrict to ECFP4 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{fig_molecular_lens.pdf}
-  \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Atoms are colour-coded by ECFP4 attribution value and paired with top-bit bar charts.}
+  \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Same layout as Figure~\ref{fig:molecular-lens-main}: atom-coloured molecule, ECFP4 circular environment thumbnails (blue = center atom), and decoded substructure attributions. Axis labels use the format \texttt{[ar.|ring.]element\textendash neighbors\,(r=radius)}.}
   \label{fig:molecular-lens}
 \end{figure}
 
