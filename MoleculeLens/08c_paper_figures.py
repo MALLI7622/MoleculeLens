@@ -226,21 +226,27 @@ CASES = [
     (222, "Acyclovir sodium",    "Herpesvirus DNA\npolymerase inh.",  "guanine base +\nacyclic sugar"),
 ]
 
-K_BITS = 6   # show 6 bits — readable without crowding
+K_BITS = 6
 
-fig1 = plt.figure(figsize=(14, 9))
-outer = gridspec.GridSpec(2, 2, figure=fig1, hspace=0.60, wspace=0.38)
+# A stacked row layout is more readable than a dense 2x2 grid. Keep the source
+# figure close to manuscript-page proportions so LaTeX does not shrink labels
+# into unreadability when included at \linewidth.
+fig1 = plt.figure(figsize=(7.4, 10.2))
+outer = gridspec.GridSpec(
+    len(CASES), 1, figure=fig1,
+    hspace=0.58, top=0.965, bottom=0.080, left=0.045, right=0.985
+)
 
 for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
-    row, col = divmod(panel_idx, 2)
-    # Three inner columns: molecule | fragment thumbnails | attribution bars
+    # Two inner columns: molecule | attribution bars. Raw bit labels keep the
+    # figure visually clean; decoded substructure examples are better left to
+    # prose/appendix rather than embedding mini-figures inside this figure.
     inner = gridspec.GridSpecFromSubplotSpec(
-        1, 3, subplot_spec=outer[row, col],
-        width_ratios=[1.05, 0.72, 1.10], wspace=0.06
+        1, 2, subplot_spec=outer[panel_idx],
+        width_ratios=[1.05, 1.35], wspace=0.34
     )
     ax_mol  = fig1.add_subplot(inner[0])
-    ax_frag = fig1.add_subplot(inner[1])
-    ax_bar  = fig1.add_subplot(inner[2])
+    ax_bar  = fig1.add_subplot(inner[1])
 
     smiles = df.iloc[drug_idx]["smiles"]
     av     = attr_vec(drug_idx, W_m, Bt)
@@ -248,7 +254,7 @@ for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
 
     bits, vals = top_bits(info, av, k=K_BITS)
     atom_cols, _ = atom_colours_from_bits(mol, info, bits, av)
-    img = render_mol(smiles, atom_cols, size=(310, 240))
+    img = render_mol(smiles, atom_cols, size=(360, 230))
 
     # ── molecule panel ────────────────────────────────────────────────
     if img:
@@ -257,69 +263,43 @@ for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
     sim_score = (Bm[drug_idx] @ Bt[drug_idx]).item()
     ax_mol.set_title(
         f"({chr(65+panel_idx)}) {name}\n{mech}",
-        fontsize=8.5, fontweight="bold", pad=3, loc="left"
+        fontsize=10.5, fontweight="bold", pad=4, loc="left"
     )
-
-    # ── fragment thumbnail column ─────────────────────────────────────
-    # Each row shows a tiny rendering of the ECFP4 circular environment
-    # (blue center atom, light-blue environment) so the reviewer sees
-    # exactly which substructure the bit index refers to.
-    ax_frag.axis("off")
-    ax_frag.set_xlim(0, 1)
-    ax_frag.set_ylim(-0.5, K_BITS - 0.5)
-    ax_frag.set_title("Substructure\n(center atom = blue)",
-                      fontsize=6.2, pad=3, color="#444444")
 
     bits_rev = bits[::-1]
     vals_rev = vals[::-1]
 
-    for i, bit in enumerate(bits_rev):
-        frag_img = render_bit_fragment(smiles, info, bit, size=(82, 60))
-        y_pos = K_BITS - 1 - i  # top-to-bottom so top bar aligns with top image
-        if frag_img is not None:
-            img_arr = np.array(frag_img)
-            # imshow with extent places the image at exact data coordinates
-            ax_frag.imshow(img_arr,
-                           extent=[0.04, 0.96, y_pos - 0.40, y_pos + 0.40],
-                           aspect='auto', zorder=3)
-            # light border around each thumbnail
-            from matplotlib.patches import Rectangle
-            rect = Rectangle((0.04, y_pos - 0.40), 0.92, 0.80,
-                              linewidth=0.5, edgecolor="#b0b8c8",
-                              facecolor="none", zorder=4)
-            ax_frag.add_patch(rect)
-
     # ── attribution bar chart ─────────────────────────────────────────
-    # Y-axis labels use decoded chemical names so the reviewer understands
-    # what each bit represents without chemistry expertise:
-    #   "ar.C-CN (r=2)" = aromatic Carbon bonded to C,N; environment
-    #   extends 2 bonds from center. Green bar = pushes toward text match.
+    # Compact labels keep the figure legible while still giving readers a
+    # decoded chemical cue for each ECFP4 bit.
     colours = [CMAP_ATTR(0.85) if v > 0 else CMAP_ATTR(0.15) for v in vals_rev]
-    ax_bar.barh(range(K_BITS), vals_rev, color=colours, height=0.60, edgecolor="none")
-    ax_bar.axvline(0, color="#333333", lw=0.7, zorder=3)
-    ax_bar.set_xlabel("Attribution score", fontsize=7)
-    ax_bar.set_title(f"Top-{K_BITS} substructure attributions\n(sim={sim_score:.3f})",
-                     fontsize=7.5, pad=3)
+    ax_bar.barh(range(K_BITS), vals_rev, color=colours, height=0.56, edgecolor="none")
+    ax_bar.axvline(0, color="#333333", lw=0.8, zorder=3)
+    ax_bar.set_xlabel("Attribution score", fontsize=8.5)
+    ax_bar.set_title(f"Top-{K_BITS} ECFP4 bit attributions\n(sim={sim_score:.3f})",
+                     fontsize=9.5, pad=4)
 
-    decoded = [decode_bit_label(mol, info, b) for b in bits_rev]
+    bit_labels = [f"bit {int(b)} / {decode_bit_label(mol, info, b)}" for b in bits_rev]
     ax_bar.set_yticks(range(K_BITS))
-    ax_bar.set_yticklabels(decoded, fontsize=6.2)
+    ax_bar.set_yticklabels(bit_labels, fontsize=7.6)
+    ax_bar.tick_params(axis="y", pad=3)
+    ax_bar.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.8)
 
     # Expected pharmacophore annotation
-    ax_bar.text(0.97, 0.03, f"Expected:\n{expected}",
-                transform=ax_bar.transAxes, fontsize=6,
-                ha="right", va="bottom", color="#555555",
-                bbox=dict(boxstyle="round,pad=0.3", fc="#f5f5f5", ec="#cccccc", lw=0.5))
+    ax_mol.text(0.02, 0.02, f"Expected:\n{expected}",
+                transform=ax_mol.transAxes, fontsize=7.2,
+                ha="left", va="bottom", color="#555555",
+                bbox=dict(boxstyle="round,pad=0.32", fc="#f7f7f7", ec="#cccccc", lw=0.6))
 
 # shared colorbar legend
-cbar_ax = fig1.add_axes([0.30, 0.01, 0.40, 0.018])
+cbar_ax = fig1.add_axes([0.28, 0.025, 0.44, 0.014])
 sm = plt.cm.ScalarMappable(cmap=CMAP_ATTR, norm=Normalize(vmin=-1, vmax=1))
 sm.set_array([])
 cb = fig1.colorbar(sm, cax=cbar_ax, orientation="horizontal")
 cb.set_ticks([-1, 0, 1])
-cb.set_ticklabels(["pushes away\nfrom text", "neutral", "pushes toward\ntext"], fontsize=6.5)
+cb.set_ticklabels(["pushes away\nfrom text", "neutral", "pushes toward\ntext"], fontsize=7.5)
 cb.ax.tick_params(size=0)
-cbar_ax.set_title("ECFP4 bit attribution", fontsize=7, pad=2)
+cbar_ax.set_title("ECFP4 bit attribution", fontsize=8.0, pad=2)
 
 
 fig1.savefig("MoleculeLens-paper/figures/fig_molecular_lens.pdf",
