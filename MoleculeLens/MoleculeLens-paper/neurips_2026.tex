@@ -118,7 +118,28 @@ KV-PLM scaffold & 0.055 & 0.121 & [0.037, 0.081] \\
 \end{tabular}
 \end{table}
 
-The non-overlapping Recall@1 intervals for MoleculeLens \texttt{text\_rich} and MolPrompt support the reliability of the top-rank improvement despite the 435-example test set. Five additional scaffold splits with a simplified proxy objective give R@1 $0.213\pm0.045$, and a five-seed full-loss spot check using the same seeds 0--4 gives R@1 $0.277\pm0.081$; full per-seed tables and the robustness figure are in Appendix~\ref{app:robustness}. The three leakage numbers answer different questions: the 51.0\% retrained drop is the fairest model-comparison number, the 70.4\% same-model drop is the causal diagnostic for the fixed rich model, and the 22.9\% multi-seed proxy mean measures partition sensitivity rather than canonical leakage.
+The non-overlapping Recall@1 intervals for MoleculeLens \texttt{text\_rich} and MolPrompt support the reliability of the top-rank improvement despite the 435-example test set. We also reran the full MoleculeLens objective across the same five consecutive scaffold seeds used by the proxy robustness analysis. Table~\ref{tab:full-loss-multiseed} shows that the complete objective is not weaker than the simplified proxy: mean R@1 is $0.277\pm0.081$ and mean MRR is $0.354\pm0.083$. The higher variance is expected because each seed induces a different scaffold-held-out test set, but every full-loss seed remains above KV-PLM scaffold R@1 and four of five exceed MolPrompt scaffold R@1. The three leakage numbers answer different questions: the 51.0\% retrained drop is the fairest model-comparison number, the 70.4\% same-model drop is the causal diagnostic for the fixed rich model, and the 22.9\% multi-seed proxy mean measures partition sensitivity rather than canonical leakage.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Five-seed full-loss check. These runs use the same same-target weighting and hardest-same-target margin term as the main MoleculeLens model. Seeds 0--4 were selected as the same consecutive seed set used by the proxy analysis before evaluating full-loss results.}
+\label{tab:full-loss-multiseed}
+\begin{tabular}{r r r r r r}
+\toprule
+Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR \\
+\midrule
+0 & 403 & 0.221 & 0.335 & 0.424 & 0.291 \\
+1 & 261 & 0.295 & 0.479 & 0.533 & 0.381 \\
+2 & 224 & 0.259 & 0.375 & 0.442 & 0.328 \\
+3 & 221 & 0.407 & 0.561 & 0.629 & 0.484 \\
+4 & 395 & 0.203 & 0.342 & 0.451 & 0.284 \\
+\midrule
+\textbf{Mean} & -- & \textbf{0.277} & \textbf{0.418} & \textbf{0.496} & \textbf{0.354} \\
+\textbf{Std} & -- & 0.081 & 0.098 & 0.085 & 0.083 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[t]
 \centering
@@ -161,13 +182,49 @@ Identical no-drug text: non-identical exact top-10 sets & 952/954 \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:attr-validation} supports rank-based use of the saliency proxy. It tracks the exact normalized-score gradient strongly and the exact bit-drop score even more closely. The identical-text test addresses a key conceptual concern: the exact top-10 bit-drop sets are almost never identical across distinct drugs sharing the same no-drug query, so the implemented normalized score is strongly drug-specific. The proxy also remains faithful for failed retrievals, which means incorrect predictions remain auditable decisions of the learned scoring function rather than cases where the attribution method collapses. Appendix~\ref{app:attribution} provides additional case studies and aggregate bit statistics.
+Table~\ref{tab:attr-validation} supports rank-based use of the saliency proxy. It tracks the exact normalized-score gradient strongly and the exact bit-drop score even more closely. The identical-text test addresses a key conceptual concern: the exact top-10 bit-drop sets are almost never identical across distinct drugs sharing the same no-drug query, so the implemented normalized score is strongly drug-specific. The proxy also remains faithful for failed retrievals, which means incorrect predictions remain auditable decisions of the learned scoring function rather than cases where the attribution method collapses. Appendix~\ref{app:attribution} provides additional case studies.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{fig_molecular_lens.pdf}
   \caption{\textbf{ECFP4 linear saliency examples for correctly retrieved pairs.} Atoms are colour-coded by attribution value and paired with top-bit bar charts, showing that high-saliency bits often align with mechanism-relevant pharmacophoric regions.}
   \label{fig:molecular-lens-main}
+\end{figure}
+
+\paragraph{What substructures recur?}
+The saliency lens is useful only if it identifies interpretable molecular features rather than a single global shortcut. Table~\ref{tab:universal-bits} summarizes the most frequent high-saliency ECFP4 bits across the scaffold test set. Bit 1538 is the most common, appearing in the top-10 for 85 pairs; RDKit decoding maps it to a benzene-ring environment with at least one heteroatom substituent at radius 2, a common pharmacophore anchor across several mechanism families. Frequencies drop sharply after the leading bits, and several frequent bits have near-zero mean signed attribution because they appear in both positive and negative contexts. This pattern supports the intended interpretation: MoleculeLens exposes recurring chemically meaningful substructures, but retrieval decisions are not dominated by one universal fingerprint bit.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Most frequent high-saliency ECFP4 bits across 435 scaffold test pairs. Frequency is the number of test pairs for which the bit appears in the top-10 saliency ranking.}
+\label{tab:universal-bits}
+\begin{tabular}{c c c}
+\toprule
+Bit index & Frequency & Mean attribution \\
+\midrule
+1538 & 85 (19.5\%) & 0.228 \\
+1380 & 74 (17.0\%) & 0.004 \\
+1873 & 55 (12.6\%) & 0.000 \\
+807  & 44 (10.1\%) & 0.002 \\
+715  & 36 ( 8.3\%) & 0.029 \\
+350  & 35 ( 8.0\%) & 0.021 \\
+1171 & 33 ( 7.6\%) & 0.009 \\
+1917 & 32 ( 7.4\%) & 0.001 \\
+1039 & 31 ( 7.1\%) & 0.011 \\
+80   & 30 ( 6.9\%) & 0.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Auditing near misses.}
+Faithful attribution is useful beyond correctly retrieved examples. Among rank-2/3 errors after parent-structure filtering, 30 of 43 have attribution correlation above 0.5 between the correct drug and the retrieved drug, with mean correlation 0.569. These are not counted as correct in the diagonal retrieval metric, but the analysis distinguishes chemically plausible near misses from arbitrary failures. Figure~\ref{fig:wrong-close-main} shows a representative case: sodium phenylacetate is ranked second while sodium phenylbutyrate is ranked first, and the two molecules share the same ammonia-lowering mechanism with highly overlapping salient substructures. This does not make the retrieval correct, but it shows that MoleculeLens can expose when an error is driven by related chemical evidence rather than an opaque embedding artifact.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{fig_wrong_close.pdf}
+  \caption{\textbf{Auditing wrong-but-close retrievals.} For rank-2/3 errors, attribution correlation separates chemically related near misses from less interpretable failures. Sodium phenylacetate and sodium phenylbutyrate illustrate a high-correlation same-mechanism confusion.}
+  \label{fig:wrong-close-main}
 \end{figure}
 
 \paragraph{Same-model leakage attribution.}
@@ -201,6 +258,11 @@ We adapt the logit-lens idea~\citep{voss2020logitlens} by applying the trained t
 MoleculeLens is not a claim that frozen ECFP4 plus a linear bridge solves scaffold-generalized drug--text retrieval. Its narrower contribution is that a lightweight model remains competitive at top-rank scaffold retrieval while making its decisions inspectable at the ECFP4-substructure level. The saliency proxy is validated against exact score-derived quantities, remains faithful on retrieval failures, and exposes same-model drug-name leakage as a shift in salient molecular features.
 
 The benchmark has important limitations. The rich text field includes target and action metadata, and the mechanism-only ablation confirms that these fields contribute retrieval signal; the rich-text result should therefore be interpreted as curated mechanism-metadata retrieval rather than pure free-text mechanism understanding. The dataset covers FDA-approved drugs with curated ChEMBL mechanisms and does not establish generalization to investigational compounds or non-ChEMBL prose. Finally, the baseline set does not include adapted MolT5, BioT5, Uni-Mol, MolCA, or chemistry-LLM retrieval systems; these require nontrivial task adaptation and remain important future comparisons.
+
+\paragraph{Reproducibility and intended use.}
+The benchmark is designed to make these limitations visible rather than hide them. The scaffold split is released as a fixed artifact, the paper-facing tables are regenerated through a single artifact-refresh path, and all main numbers are tied to saved manifests. This matters because retrieval benchmarks are easy to contaminate: changing from scaffold-held-out evaluation to a full-gallery setting, or changing from same-model ablation to retrained no-drug comparison, answers a different scientific question. We therefore report the stronger rich-text result, the stricter mechanism-only condition, and the same-model no-name ablation side by side.
+
+MoleculeLens is intended as an auditing tool for drug--text alignment, not as a standalone decision system for chemistry or medicine. It does not generate new molecules and should not be used for clinical or regulatory decisions without expert review. Its positive use case is narrower: when a retrieval model proposes a structure--mechanism match, MoleculeLens can show which fingerprint environments contributed to that match and whether those environments change under text perturbations. That makes it useful for diagnosing shortcut learning, prioritizing cases for medicinal-chemist inspection, and building stronger future benchmarks where higher-capacity encoders can be evaluated with the same scaffold and leakage controls.
 
 \section{Conclusion}
 
@@ -257,26 +319,7 @@ Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR & Leakage drop \\
 \end{tabular}
 \end{table}
 
-\begin{table}[h]
-\centering
-\small
-\caption{Five-seed full-loss check. These runs use the same same-target weighting and hardest-same-target margin term as the main MoleculeLens model. Seeds 0--4 were selected as the same consecutive seed set used by the proxy analysis before evaluating full-loss results.}
-\label{tab:full-loss-multiseed}
-\begin{tabular}{r r r r r r}
-\toprule
-Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR \\
-\midrule
-0 & 403 & 0.221 & 0.335 & 0.424 & 0.291 \\
-1 & 261 & 0.295 & 0.479 & 0.533 & 0.381 \\
-2 & 224 & 0.259 & 0.375 & 0.442 & 0.328 \\
-3 & 221 & 0.407 & 0.561 & 0.629 & 0.484 \\
-4 & 395 & 0.203 & 0.342 & 0.451 & 0.284 \\
-\midrule
-\textbf{Mean} & -- & \textbf{0.277} & \textbf{0.418} & \textbf{0.496} & \textbf{0.354} \\
-\textbf{Std} & -- & 0.081 & 0.098 & 0.085 & 0.083 \\
-\bottomrule
-\end{tabular}
-\end{table}
+The corresponding full-loss five-seed check is reported in the main text in Table~\ref{tab:full-loss-multiseed}.
 
 \begin{figure}[h]
 \centering
@@ -297,30 +340,7 @@ For each test pair, we compute Equation~\ref{eq:attribution}, restrict to ECFP4 
   \label{fig:molecular-lens}
 \end{figure}
 
-\begin{table}[h]
-\centering
-\small
-\caption{Most frequent high-saliency ECFP4 bits across 435 test pairs. Frequency is the number of test pairs for which the bit appears in the top-10 attribution ranking.}
-\label{tab:universal-bits}
-\begin{tabular}{c c c}
-\toprule
-Bit index & Frequency & Mean attribution \\
-\midrule
-1538 & 85 (19.5\%) & 0.228 \\
-1380 & 74 (17.0\%) & 0.004 \\
-1873 & 55 (12.6\%) & 0.000 \\
-807  & 44 (10.1\%) & 0.002 \\
-715  & 36 ( 8.3\%) & 0.029 \\
-350  & 35 ( 8.0\%) & 0.021 \\
-1171 & 33 ( 7.6\%) & 0.009 \\
-1917 & 32 ( 7.4\%) & 0.001 \\
-1039 & 31 ( 7.1\%) & 0.011 \\
-80   & 30 ( 6.9\%) & 0.000 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Bit 1538 is the most frequent high-saliency feature, appearing in the top-10 for 85 pairs. RDKit decoding maps it to a benzene-ring environment with at least one heteroatom substituent at radius 2, a common pharmacophore anchor across several major test-set families. The frequency drops sharply after the top few bits, indicating that no small universal shortcut dominates the saliency landscape.
+Aggregate high-saliency bit frequencies are reported in the main text in Table~\ref{tab:universal-bits}.
 
 \begin{figure}[h]
   \centering
@@ -405,9 +425,7 @@ The shared 256-dimensional embedding space is amenable to sparse autoencoder ana
 
 \section{Broader Impacts}
 
-MoleculeLens targets drug--text alignment for mechanism-based retrieval. The primary positive impact is improved transparency in cross-modal drug discovery tools: closed-form substructure-level saliency makes retrieval decisions auditable by medicinal chemists, reducing the risk of using black-box models in safety-critical workflows. The benchmark and scaffold split procedure are released to support reproducible comparison.
-
-We do not foresee significant negative societal impacts. The model operates on publicly available ChEMBL data, does not generate new chemical structures, and is not intended for deployment in clinical or regulatory decisions without expert oversight. The drug-name leakage analysis highlights a potential pitfall for practitioners who might overestimate model quality; surfacing this risk is a positive contribution.
+Broader impacts and intended-use considerations are discussed in the main text. In brief, MoleculeLens is an auditing framework for publicly available ChEMBL drug--mechanism retrieval and is not intended for clinical or regulatory deployment without expert oversight.
 
 \input{checklist}
 
