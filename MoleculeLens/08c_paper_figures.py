@@ -345,12 +345,15 @@ bits_r,  vals_r  = top_bits(info_lk, av_rich,   k=10)
 bits_nd, vals_nd = top_bits(info_lk, av_nodrug, k=10)
 atom_cols_r,  _ = atom_colours_from_bits(mol_lk, info_lk, bits_r,  av_rich)
 atom_cols_nd, _ = atom_colours_from_bits(mol_lk, info_lk, bits_nd, av_nodrug)
-img_r  = render_mol(smiles_lk, atom_cols_r,  size=(300, 230))
-img_nd = render_mol(smiles_lk, atom_cols_nd, size=(300, 230))
+img_r  = render_mol(smiles_lk, atom_cols_r,  size=(250, 180))
+img_nd = render_mol(smiles_lk, atom_cols_nd, size=(250, 180))
 
-fig2 = plt.figure(figsize=(13, 4.5))
-gs2 = gridspec.GridSpec(1, 5, figure=fig2, wspace=0.45,
-                        width_ratios=[1.4, 0.05, 1.6, 0.05, 1.6])
+fig2 = plt.figure(figsize=(10.6, 3.15))
+gs2 = gridspec.GridSpec(
+    1, 5, figure=fig2, wspace=0.36,
+    left=0.065, right=0.985, bottom=0.20, top=0.84,
+    width_ratios=[1.25, 0.04, 1.42, 0.04, 1.42]
+)
 
 # ── Panel A: Jaccard histogram ───────────────────────────────────────────
 ax_hist = fig2.add_subplot(gs2[0])
@@ -385,7 +388,7 @@ for col_idx, (bits, vals, label, correct_str, bar_col) in enumerate([
     ax.set_title(f"({cond_char}) {name_lk}  —  {label}", fontweight="bold",
                  fontsize=8, color=bar_col)
     # embed molecule image
-    inset = ax.inset_axes([0.55, 0.45, 0.43, 0.52])
+    inset = ax.inset_axes([0.58, 0.50, 0.38, 0.42])
     img_to_show = img_r if col_idx == 0 else img_nd
     if img_to_show:
         inset.imshow(img_to_show)
@@ -393,9 +396,9 @@ for col_idx, (bits, vals, label, correct_str, bar_col) in enumerate([
     inset.set_title("atoms coloured\nby attribution", fontsize=5.5, pad=1)
 
 fig2.savefig("MoleculeLens-paper/figures/fig_leakage_substructure.pdf",
-             bbox_inches="tight", dpi=300)
+             bbox_inches="tight", pad_inches=0.02, dpi=300)
 fig2.savefig("MoleculeLens-paper/figures/fig_leakage_substructure.png",
-             bbox_inches="tight", dpi=300)
+             bbox_inches="tight", pad_inches=0.02, dpi=300)
 plt.close(fig2)
 print("Saved: fig_leakage_substructure.pdf/.png")
 
@@ -405,8 +408,12 @@ print("Saved: fig_leakage_substructure.pdf/.png")
 # Left: correlation histogram   Right: representative high-correlation pair
 # ═══════════════════════════════════════════════════════════════════════════
 
-fig3 = plt.figure(figsize=(12, 4.2))
-gs3 = gridspec.GridSpec(1, 2, figure=fig3, wspace=0.35, width_ratios=[1.1, 1.9])
+fig3 = plt.figure(figsize=(10.4, 3.05))
+gs3 = gridspec.GridSpec(
+    1, 2, figure=fig3, wspace=0.28,
+    left=0.07, right=0.985, bottom=0.20, top=0.82,
+    width_ratios=[1.08, 1.92]
+)
 
 # ── Panel A: correlation histogram ──────────────────────────────────────
 ax_corr = fig3.add_subplot(gs3[0])
@@ -442,8 +449,8 @@ shared_bits   = set(info_c.keys()) & set(info_r.keys())
 # colour shared bits by attribution on each drug
 ac_c, _ = atom_colours_from_bits(mol_c, info_c, list(shared_bits)[:12], av_c)
 ac_r, _ = atom_colours_from_bits(mol_r, info_r, list(shared_bits)[:12], av_r)
-img_c   = render_mol(s_c, ac_c, size=(290, 220))
-img_r   = render_mol(s_r, ac_r, size=(290, 220))
+img_c   = render_mol(s_c, ac_c, size=(245, 170))
+img_r   = render_mol(s_r, ac_r, size=(245, 170))
 
 inner3 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs3[1],
                                           width_ratios=[1, 0.18, 1], wspace=0.0)
@@ -474,9 +481,9 @@ ax_mid.text(0.5, 0.18, "same\nMOA" if same_moa else "diff.\nMOA",
             transform=ax_mid.transAxes)
 
 fig3.savefig("MoleculeLens-paper/figures/fig_wrong_close.pdf",
-             bbox_inches="tight", dpi=300)
+             bbox_inches="tight", pad_inches=0.02, dpi=300)
 fig3.savefig("MoleculeLens-paper/figures/fig_wrong_close.png",
-             bbox_inches="tight", dpi=300)
+             bbox_inches="tight", pad_inches=0.02, dpi=300)
 plt.close(fig3)
 print("Saved: fig_wrong_close.pdf/.png")
 
