@@ -252,6 +252,8 @@ We adapt the logit-lens idea~\citep{voss2020logitlens} by applying the trained t
   \label{fig:logit-lens-main}
 \end{figure}
 
+\clearpage
+
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
@@ -269,7 +271,6 @@ MoleculeLens is intended as an auditing tool for drug--text alignment, not as a 
 On a 2,699-pair ChEMBL benchmark with scaffold-disjoint evaluation, MoleculeLens outperforms MolPrompt and KV-PLM on Recall@1 and MRR while clearly exposing the role of lexical and target/action metadata. Its central value is interpretability: the linear molecular bridge yields a validated, efficient ECFP4 saliency lens that can audit correct matches, failed retrievals, and same-model leakage. This makes MoleculeLens a useful foundation for future work on stronger encoders, text-identifiability audits, and feature-level analysis of drug--text alignment.
 
 
-\clearpage
 \bibliographystyle{plainnat}
 \bibliography{refs}
 
