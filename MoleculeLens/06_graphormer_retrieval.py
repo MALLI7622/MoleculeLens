@@ -58,6 +58,8 @@ python 06_graphormer_retrieval.py --csv chembl_mechanisms.csv \\
 import os
 import sys
 import copy
+import gc
+import json
 import argparse
 import random
 import numpy as np
@@ -80,11 +82,16 @@ import matplotlib.pyplot as plt
 # ---------------------------------------------------------------------------
 MOLPROMPT_DIR = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "MolPrompt"))
+DEFAULT_SPLIT_MANIFEST = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "splits",
+    "chembl_scaffold_seed0_train80_val10_test10.json",
+)
 
 SCIBERT_PATH = os.environ.get(
     "SCIBERT_PATH",
     os.path.expanduser(
-        "~/data/pretrained_SciBERT/models--allenai--scibert_scivocab_uncased"
+        "~/MoleculeSTM/data/pretrained_SciBERT/models--allenai--scibert_scivocab_uncased"
         "/snapshots/24f92d32b1bfb0bcaf9ab193ff3ad01e87732fc1"
     )
 )
@@ -145,6 +152,35 @@ def smiles_to_graph(smi, mol_to_graph, preprocess):
     if mol is None:
         return None
     return preprocess(mol_to_graph(mol))
+
+
+def load_manifest_split(df, manifest_path):
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    split_rows = manifest.get("splits", {})
+    required = ("train", "test")
+    missing = [name for name in required if name not in split_rows]
+    if missing:
+        raise ValueError(f"Split manifest missing required splits: {missing}")
+
+    source_to_pos = {int(src): pos for pos, src in enumerate(df["source_row"].tolist())}
+
+    def _take(split_name):
+        source_rows = split_rows.get(split_name, [])
+        missing_rows = [int(src) for src in source_rows if int(src) not in source_to_pos]
+        if missing_rows:
+            preview = missing_rows[:5]
+            raise ValueError(
+                f"Manifest rows for split '{split_name}' are not present after filtering: {preview}"
+            )
+        positions = [source_to_pos[int(src)] for src in source_rows]
+        return df.iloc[positions].reset_index(drop=True)
+
+    train_df = _take("train")
+    val_df = _take("val") if "val" in split_rows else pd.DataFrame(columns=df.columns)
+    test_df = _take("test")
+    return manifest, train_df, val_df, test_df
 
 
 # Padding helpers (mirror collator_prop.py, no prompt fields needed)
@@ -234,14 +270,14 @@ def load_text_encoder(device):
 def encode_graphs_frozen(graphs, encoder, device, batch_size=32):
     """Encode graphs with frozen encoder. Returns [N, 768] tensor."""
     encoder.eval()
+    is_cuda = (device.type == "cuda") if isinstance(device, torch.device) else str(device).startswith("cuda")
     reps = []
     for i in tqdm(range(0, len(graphs), batch_size), desc="Encode graphs"):
-        b  = collate_graphs(graphs[i: i + batch_size])
-        rep = encoder(b["x"].to(device), b["attn_bias"].to(device),
-                      b["attn_edge_type"].to(device), b["spatial_pos"].to(device),
-                      b["in_degree"].to(device), b["out_degree"].to(device),
-                      b["edge_input"].to(device))
-        reps.append(rep.cpu())
+        rep = _encode_graph_batch(graphs[i: i + batch_size], encoder, device)
+        reps.append(rep)
+        if is_cuda:
+            torch.cuda.empty_cache()
+        gc.collect()
     return torch.cat(reps, dim=0)
 
 
@@ -343,13 +379,32 @@ class EmbedPairDataset(Dataset):
 
 
 class GraphTextPairDataset(Dataset):
-    """Raw graph + text pairs (for C2 end-to-end training)."""
-    def __init__(self, graphs, texts, groups):
-        self.graphs = graphs
-        self.texts  = texts
+    """Lazy graph + text pairs (for C2 end-to-end training)."""
+    def __init__(self, smiles, texts, groups, mol_to_graph, preprocess):
+        self.smiles = list(smiles)
+        self.texts  = list(texts)
         self.grp    = np.array(groups).astype(str)
-    def __len__(self): return len(self.graphs)
-    def __getitem__(self, i): return self.graphs[i], self.texts[i], self.grp[i], i
+        self.mol_to_graph = mol_to_graph
+        self.preprocess = preprocess
+
+    def __len__(self):
+        return len(self.smiles)
+
+    def __getitem__(self, i):
+        graph = smiles_to_graph(self.smiles[i], self.mol_to_graph, self.preprocess)
+        return graph, self.texts[i], self.grp[i], i
+
+
+def collate_graph_text_pairs(batch):
+    graphs, texts, groups, idxs = [], [], [], []
+    for graph, text, group, idx in batch:
+        if graph is None or graph.x.size(0) > MAX_NODE:
+            continue
+        graphs.append(graph)
+        texts.append(text)
+        groups.append(group)
+        idxs.append(idx)
+    return graphs, texts, groups, idxs
 
 
 # ===========================================================================
@@ -386,19 +441,41 @@ def t_choose_one(S_np, T_list=(4, 10, 20), n_trials=1000, seed=SEED):
     return results
 
 
-def compute_metrics(S_np):
+MIN_GROUP_SIZE = 3   # matches 03_train_scaffold_split.py
+
+
+def grouped_recall_at1(S_np, meta_df, group_col="target_chembl_id", min_group=3):
+    """Per-group Recall@1: for each query, rank within its assay group only.
+    Mirrors 03_train_scaffold_split.py exactly."""
+    groups = meta_df[group_col].values
+    scores = []
+    for i in range(S_np.shape[0]):
+        idxs = np.where(groups == groups[i])[0]
+        if len(idxs) < min_group:
+            continue
+        row   = S_np[i, idxs]
+        rank  = int(np.where(np.argsort(-row) == np.where(idxs == i)[0][0])[0][0])
+        scores.append(1.0 if rank == 0 else 0.0)
+    return float(np.mean(scores)) if scores else float("nan")
+
+
+def compute_metrics(S_np, test_df=None):
     rec1, mrr = recall_mrr(S_np)
     rk        = recall_at_k(S_np, k_list=[1, 5, 10])
     tco       = t_choose_one(S_np, T_list=[4, 10, 20])
-    return rec1, mrr, rk, tco
+    gr1       = (grouped_recall_at1(S_np, test_df, min_group=MIN_GROUP_SIZE)
+                 if test_df is not None else float("nan"))
+    return rec1, mrr, rk, tco, gr1
 
 
-def print_table(label, rec1, mrr, rk, tco, N):
+def print_table(label, rec1, mrr, rk, tco, gr1, N):
     print(f"\n{'='*65}\n  {label}  (N={N})\n{'='*65}")
     print(f"  {'Recall@1':<28} {rec1:>8.3f}")
     print(f"  {'MRR':<28} {mrr:>8.3f}")
     print(f"  {'Recall@5':<28} {rk[5]:>8.3f}")
     print(f"  {'Recall@10':<28} {rk[10]:>8.3f}")
+    gr1_str = f"{gr1:.3f}" if not (gr1 != gr1) else "  n/a"   # nan check
+    print(f"  {'Grouped Recall@1 (g≥3)':<28} {gr1_str:>8}")
     for T in [4, 10, 20]:
         print(f"  {'T='+str(T)+' S->T':<28} {tco[T]['S->T']:>8.3f}")
         print(f"  {'T='+str(T)+' T->S':<28} {tco[T]['T->S']:>8.3f}")
@@ -409,7 +486,8 @@ def print_table(label, rec1, mrr, rk, tco, N):
 # Training loops
 # ===========================================================================
 def train_c2_molprompt_style(graph_enc, text_enc, text_tok,
-                              train_graphs, train_texts, train_groups,
+                              train_smiles, train_texts, train_groups,
+                              mol_to_graph, preprocess,
                               device, epochs, lr, weight_decay, temp, batch_size):
     """
     Condition 2: MolPrompt-style end-to-end training.
@@ -427,6 +505,17 @@ def train_c2_molprompt_style(graph_enc, text_enc, text_tok,
         list(proj_text.parameters()),
         lr=lr, weight_decay=weight_decay)
 
+    ds = GraphTextPairDataset(
+        train_smiles, train_texts, train_groups, mol_to_graph, preprocess
+    )
+    dl = DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=True,
+        drop_last=False,
+        collate_fn=collate_graph_text_pairs,
+    )
+
     epoch_losses = []
     print(f"\nCondition 2 — MolPrompt-style: training {epochs} epochs "
           f"(batch={batch_size}, encoders UNFROZEN, MLP heads, NT-Xent only) ...")
@@ -436,15 +525,9 @@ def train_c2_molprompt_style(graph_enc, text_enc, text_tok,
         proj_graph.train(); proj_text.train()
         running = n = 0
 
-        # Shuffle indices
-        idx = list(range(len(train_graphs)))
-        random.shuffle(idx)
-
-        for start in range(0, len(idx) - batch_size + 1, batch_size):
-            batch_idx = idx[start: start + batch_size]
-            batch_graphs = [train_graphs[i] for i in batch_idx]
-            batch_texts  = [train_texts[i]  for i in batch_idx]
-            batch_groups = [train_groups[i] for i in batch_idx]
+        for batch_graphs, batch_texts, _, _ in dl:
+            if len(batch_graphs) < 2:
+                continue
 
             # Graph forward
             b = collate_graphs(batch_graphs)
@@ -471,6 +554,62 @@ def train_c2_molprompt_style(graph_enc, text_enc, text_tok,
             print(f"  Epoch {ep:>3}/{epochs}: loss={avg:.4f}")
 
     return proj_graph, proj_text, epoch_losses
+
+
+def validate_smiles_graphs(smiles_series, mol_to_graph, preprocess, desc, keep_graphs=False):
+    ok = []
+    kept_graphs = [] if keep_graphs else None
+    for i, smi in enumerate(tqdm(smiles_series, desc=desc)):
+        graph = smiles_to_graph(smi, mol_to_graph, preprocess)
+        if graph is None or graph.x.size(0) > MAX_NODE:
+            continue
+        ok.append(i)
+        if keep_graphs:
+            kept_graphs.append(graph)
+    return kept_graphs, ok
+
+
+def _encode_graph_batch(graphs, encoder, device):
+    batch = collate_graphs(graphs)
+    x = batch["x"].to(device)
+    attn_bias = batch["attn_bias"].to(device)
+    attn_edge_type = batch["attn_edge_type"].to(device)
+    spatial_pos = batch["spatial_pos"].to(device)
+    in_degree = batch["in_degree"].to(device)
+    out_degree = batch["out_degree"].to(device)
+    edge_input = batch["edge_input"].to(device)
+    rep = encoder(
+        x, attn_bias, attn_edge_type, spatial_pos,
+        in_degree, out_degree, edge_input,
+    ).cpu()
+    del batch, x, attn_bias, attn_edge_type, spatial_pos, in_degree, out_degree, edge_input
+    return rep
+
+
+@torch.no_grad()
+def encode_graphs_frozen_from_smiles(smiles_list, mol_to_graph, preprocess,
+                                     encoder, device, batch_size=32, desc="Encode graphs"):
+    encoder.eval()
+    is_cuda = (device.type == "cuda") if isinstance(device, torch.device) else str(device).startswith("cuda")
+    reps = []
+    batch_graphs = []
+    for smi in tqdm(smiles_list, desc=desc):
+        graph = smiles_to_graph(smi, mol_to_graph, preprocess)
+        if graph is None or graph.x.size(0) > MAX_NODE:
+            continue
+        batch_graphs.append(graph)
+        if len(batch_graphs) == batch_size:
+            reps.append(_encode_graph_batch(batch_graphs, encoder, device))
+            batch_graphs = []
+            if is_cuda:
+                torch.cuda.empty_cache()
+            gc.collect()
+    if batch_graphs:
+        reps.append(_encode_graph_batch(batch_graphs, encoder, device))
+        if is_cuda:
+            torch.cuda.empty_cache()
+        gc.collect()
+    return torch.cat(reps, dim=0)
 
 
 def train_c3_thinbridges_style(Z_text_train, Z_graph_train, train_groups,
@@ -576,15 +715,18 @@ def plot_score_dist(S_zs, S_c2, S_c3, outdir, sfx=""):
 # Save results CSV
 # ===========================================================================
 def save_csv(outdir, sfx, N,
-             rec1_zs, mrr_zs, rk_zs, tco_zs,
-             rec1_c2, mrr_c2, rk_c2, tco_c2,
-             rec1_c3, mrr_c3, rk_c3, tco_c3):
+             rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs,
+             rec1_c2, mrr_c2, rk_c2, tco_c2, gr1_c2,
+             rec1_c3, mrr_c3, rk_c3, tco_c3, gr1_c3):
     rows = [
         {"Metric": "Recall@1",
          "ZeroShot": rec1_zs, "MolPromptStyle": rec1_c2, "ThinBridgesStyle": rec1_c3,
          "Random": 1/N},
         {"Metric": "MRR",
          "ZeroShot": mrr_zs,  "MolPromptStyle": mrr_c2,  "ThinBridgesStyle": mrr_c3,
+         "Random": None},
+        {"Metric": f"Grouped Recall@1 (g≥{MIN_GROUP_SIZE})",
+         "ZeroShot": gr1_zs,  "MolPromptStyle": gr1_c2,  "ThinBridgesStyle": gr1_c3,
          "Random": None},
     ]
     for k in [5, 10]:
@@ -607,6 +749,8 @@ def save_csv(outdir, sfx, N,
 # Main
 # ===========================================================================
 def main(args):
+    global MAX_NODE
+    MAX_NODE = args.max_nodes
     set_seed(SEED)
     os.makedirs(args.outdir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -616,7 +760,8 @@ def main(args):
     # ------------------------------------------------------------------
     # 1. Load + clean data
     # ------------------------------------------------------------------
-    df = pd.read_csv(args.csv).dropna(subset=["smiles", "text_rich"]).copy()
+    df = pd.read_csv(args.csv).reset_index().rename(columns={"index": "source_row"})
+    df = df.dropna(subset=["smiles", "text_rich"]).copy()
     if args.remove_drug_name:
         df["text_rich"] = df["text_rich"].str.replace(
             r"Drug:\s*[^.]+\.\s*", "", regex=True).str.strip()
@@ -624,7 +769,7 @@ def main(args):
     print(f"Sample text [0]: {df['text_rich'].iloc[0]}")
 
     # ------------------------------------------------------------------
-    # 2. Scaffold split (SEED=0, 90/10 — identical to 03_train_scaffold_split.py)
+    # 2. Split
     # ------------------------------------------------------------------
     def _scaffold(smi):
         mol = Chem.MolFromSmiles(smi)
@@ -634,35 +779,47 @@ def main(args):
 
     df["scaffold"] = df["smiles"].apply(_scaffold)
     df = df.dropna(subset=["scaffold"]).reset_index(drop=True)
-    scaffolds = df["scaffold"].unique()
-    rng = np.random.default_rng(SEED); rng.shuffle(scaffolds)
-    cut = int(0.9 * len(scaffolds))
-    train_df = df[df["scaffold"].isin(set(scaffolds[:cut]))].reset_index(drop=True)
-    test_df  = df[df["scaffold"].isin(set(scaffolds[cut:]))].reset_index(drop=True)
-    print(f"Scaffold split → train: {len(train_df)} | test: {len(test_df)}")
+
+    if args.split_manifest:
+        manifest, train_df, val_df, test_df = load_manifest_split(df, args.split_manifest)
+        print(
+            "Manifest split → "
+            f"train: {len(train_df)} | val: {len(val_df)} | test: {len(test_df)}"
+        )
+        print(f"Split manifest: {args.split_manifest}")
+        if manifest.get("seed") is not None:
+            print(f"Manifest seed: {manifest['seed']}")
+    else:
+        scaffolds = df["scaffold"].unique()
+        rng = np.random.default_rng(SEED); rng.shuffle(scaffolds)
+        cut = int(0.9 * len(scaffolds))
+        train_df = df[df["scaffold"].isin(set(scaffolds[:cut]))].reset_index(drop=True)
+        val_df = pd.DataFrame(columns=df.columns)
+        test_df  = df[df["scaffold"].isin(set(scaffolds[cut:]))].reset_index(drop=True)
+        print(f"Scaffold split → train: {len(train_df)} | test: {len(test_df)}")
 
     # ------------------------------------------------------------------
     # 3. Featurise all SMILES → Graphormer graph objects
     # ------------------------------------------------------------------
-    print("\nFeaturising SMILES ...")
+    print("\nValidating SMILES ...")
     mol_to_graph, preprocess = _setup_molprompt()
 
-    def make_graphs(smiles_series, desc):
-        gs, ok = [], []
-        for i, s in enumerate(tqdm(smiles_series, desc=desc)):
-            g = smiles_to_graph(s, mol_to_graph, preprocess)
-            gs.append(g)
-            if g is not None: ok.append(i)
-        return gs, ok
-
-    train_graphs_raw, tr_ok = make_graphs(train_df["smiles"], "Featurise train")
-    test_graphs_raw,  te_ok = make_graphs(test_df["smiles"],  "Featurise test")
-
-    train_df     = train_df.iloc[tr_ok].reset_index(drop=True)
-    test_df      = test_df.iloc[te_ok].reset_index(drop=True)
-    train_graphs = [train_graphs_raw[i] for i in tr_ok]
-    test_graphs  = [test_graphs_raw[i]  for i in te_ok]
-    print(f"After validation → train: {len(train_df)} | test: {len(test_df)}")
+    if args.zero_shot_only:
+        test_graphs, te_ok = validate_smiles_graphs(
+            test_df["smiles"], mol_to_graph, preprocess, "Validate test", keep_graphs=True
+        )
+        test_df = test_df.iloc[te_ok].reset_index(drop=True)
+        print(f"After validation → test: {len(test_df)}")
+    else:
+        _, tr_ok = validate_smiles_graphs(
+            train_df["smiles"], mol_to_graph, preprocess, "Validate train", keep_graphs=False
+        )
+        test_graphs, te_ok = validate_smiles_graphs(
+            test_df["smiles"], mol_to_graph, preprocess, "Validate test", keep_graphs=True
+        )
+        train_df     = train_df.iloc[tr_ok].reset_index(drop=True)
+        test_df      = test_df.iloc[te_ok].reset_index(drop=True)
+        print(f"After validation → train: {len(train_df)} | test: {len(test_df)}")
 
     # ------------------------------------------------------------------
     # 4. Load encoders
@@ -677,14 +834,24 @@ def main(args):
     # ------------------------------------------------------------------
     print("\nPre-caching embeddings (frozen encoders) ...")
     graph_enc.eval(); text_enc.eval()
-    Z_graph_train = encode_graphs_frozen(train_graphs, graph_enc, device,
-                                         batch_size=args.graph_batch_size)
-    Z_graph_test  = encode_graphs_frozen(test_graphs,  graph_enc, device,
-                                         batch_size=args.graph_batch_size)
-    Z_text_train = encode_texts_frozen(train_df["text_rich"].tolist(),
-                                       text_tok, text_enc, device)
-    Z_text_test  = encode_texts_frozen(test_df["text_rich"].tolist(),
-                                       text_tok, text_enc, device)
+    if args.zero_shot_only or args.condition2_only:
+        Z_graph_train = None
+        Z_text_train = None
+        Z_graph_test  = encode_graphs_frozen(test_graphs, graph_enc, device,
+                                             batch_size=args.graph_batch_size)
+        Z_text_test  = encode_texts_frozen(test_df["text_rich"].tolist(),
+                                           text_tok, text_enc, device)
+    else:
+        Z_graph_train = encode_graphs_frozen_from_smiles(
+            train_df["smiles"].tolist(), mol_to_graph, preprocess,
+            graph_enc, device, batch_size=args.graph_batch_size, desc="Encode train graphs"
+        )
+        Z_graph_test  = encode_graphs_frozen(test_graphs,  graph_enc, device,
+                                             batch_size=args.graph_batch_size)
+        Z_text_train = encode_texts_frozen(train_df["text_rich"].tolist(),
+                                           text_tok, text_enc, device)
+        Z_text_test  = encode_texts_frozen(test_df["text_rich"].tolist(),
+                                           text_tok, text_enc, device)
 
     # ------------------------------------------------------------------
     # 6. Condition 1 — Zero-shot
@@ -692,14 +859,14 @@ def main(args):
     print("\n" + "="*65 + "\nCONDITION 1 — ZERO-SHOT\n" + "="*65)
     S_zs = (F.normalize(Z_text_test.float(), dim=1) @
             F.normalize(Z_graph_test.float(), dim=1).T).numpy()
-    rec1_zs, mrr_zs, rk_zs, tco_zs = compute_metrics(S_zs)
-    print_table("Zero-shot (no training)", rec1_zs, mrr_zs, rk_zs, tco_zs, len(test_df))
+    rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs = compute_metrics(S_zs, test_df)
+    print_table("Zero-shot (no training)", rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs, len(test_df))
 
     if args.zero_shot_only:
         save_csv(args.outdir, sfx, len(test_df),
-                 rec1_zs, mrr_zs, rk_zs, tco_zs,
-                 None, None, None, None,
-                 None, None, None, None)
+                 rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs,
+                 None, None, None, None, None,
+                 None, None, None, None, None)
         test_df.to_csv(os.path.join(args.outdir, f"graphormer_test_df{sfx}.csv"), index=False)
         return
 
@@ -715,9 +882,10 @@ def main(args):
 
     proj_graph_c2, proj_text_c2, losses_c2 = train_c2_molprompt_style(
         graph_enc_c2, text_enc_c2, text_tok,
-        train_graphs, train_df["text_rich"].tolist(),
+        train_df["smiles"].tolist(), train_df["text_rich"].tolist(),
         train_df["target_chembl_id"].tolist(),
-        device, C2_EPOCHS, C2_LR, C2_WEIGHT_DECAY, C2_TEMP, C2_BATCH_SIZE)
+        mol_to_graph, preprocess,
+        device, args.c2_epochs, C2_LR, C2_WEIGHT_DECAY, C2_TEMP, args.c2_batch_size)
 
     # Evaluate C2
     graph_enc_c2.eval(); text_enc_c2.eval()
@@ -730,9 +898,23 @@ def main(args):
         Bg_c2 = F.normalize(proj_graph_c2(Zg_te.to(device)), dim=1).cpu()
         Bt_c2 = F.normalize(proj_text_c2(Zt_te.to(device)),  dim=1).cpu()
     S_c2 = (Bt_c2 @ Bg_c2.T).numpy()
-    rec1_c2, mrr_c2, rk_c2, tco_c2 = compute_metrics(S_c2)
+    rec1_c2, mrr_c2, rk_c2, tco_c2, gr1_c2 = compute_metrics(S_c2, test_df)
     print_table("MolPrompt-style (unfrozen enc, MLP, NT-Xent)",
-                rec1_c2, mrr_c2, rk_c2, tco_c2, len(test_df))
+                rec1_c2, mrr_c2, rk_c2, tco_c2, gr1_c2, len(test_df))
+
+    if args.condition2_only:
+        save_csv(args.outdir, sfx, len(test_df),
+                 rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs,
+                 rec1_c2, mrr_c2, rk_c2, tco_c2, gr1_c2,
+                 None, None, None, None, None)
+        test_df.to_csv(os.path.join(args.outdir, f"graphormer_test_df{sfx}.csv"), index=False)
+        torch.save(proj_graph_c2.state_dict(),
+                   os.path.join(args.outdir, f"graphormer_c2_proj_graph{sfx}.pt"))
+        torch.save(proj_text_c2.state_dict(),
+                   os.path.join(args.outdir, f"graphormer_c2_proj_text{sfx}.pt"))
+        np.save(os.path.join(args.outdir, f"graphormer_c2_losses{sfx}.npy"), np.array(losses_c2))
+        print(f"\nCondition 2 outputs saved to {args.outdir}/  (suffix=\"{sfx}\")")
+        return
 
     # ------------------------------------------------------------------
     # 8. Condition 3 — Thin-Bridges-style (frozen, linear, NT-Xent+margin)
@@ -743,24 +925,24 @@ def main(args):
     proj_graph_c3, proj_text_c3, losses_c3 = train_c3_thinbridges_style(
         Z_text_train, Z_graph_train,
         train_df["target_chembl_id"].tolist(),
-        device, C3_EPOCHS, C3_LR, C3_WEIGHT_DECAY, C3_TEMP, C3_MARGIN, C3_BATCH_SIZE)
+        device, args.c3_epochs, C3_LR, C3_WEIGHT_DECAY, C3_TEMP, C3_MARGIN, args.c3_batch_size)
 
     proj_graph_c3.eval(); proj_text_c3.eval()
     with torch.no_grad():
         Bg_c3 = F.normalize(proj_graph_c3(Z_graph_test.to(device)), dim=1).cpu()
         Bt_c3 = F.normalize(proj_text_c3(Z_text_test.to(device)),  dim=1).cpu()
     S_c3 = (Bt_c3 @ Bg_c3.T).numpy()
-    rec1_c3, mrr_c3, rk_c3, tco_c3 = compute_metrics(S_c3)
+    rec1_c3, mrr_c3, rk_c3, tco_c3, gr1_c3 = compute_metrics(S_c3, test_df)
     print_table("Thin-Bridges-style (frozen enc, linear, NT-Xent+margin)",
-                rec1_c3, mrr_c3, rk_c3, tco_c3, len(test_df))
+                rec1_c3, mrr_c3, rk_c3, tco_c3, gr1_c3, len(test_df))
 
     # ------------------------------------------------------------------
     # 9. Save results
     # ------------------------------------------------------------------
     save_csv(args.outdir, sfx, len(test_df),
-             rec1_zs, mrr_zs, rk_zs, tco_zs,
-             rec1_c2, mrr_c2, rk_c2, tco_c2,
-             rec1_c3, mrr_c3, rk_c3, tco_c3)
+             rec1_zs, mrr_zs, rk_zs, tco_zs, gr1_zs,
+             rec1_c2, mrr_c2, rk_c2, tco_c2, gr1_c2,
+             rec1_c3, mrr_c3, rk_c3, tco_c3, gr1_c3)
 
     test_df.to_csv(os.path.join(args.outdir, f"graphormer_test_df{sfx}.csv"), index=False)
     torch.save(proj_graph_c2.state_dict(),
@@ -788,10 +970,27 @@ if __name__ == "__main__":
         description="Graphormer+SciBERT ChEMBL retrieval — 3 conditions")
     parser.add_argument("--csv",    default="chembl_mechanisms.csv")
     parser.add_argument("--outdir", default="outputs/graphormer")
+    parser.add_argument(
+        "--split_manifest",
+        default=DEFAULT_SPLIT_MANIFEST if os.path.exists(DEFAULT_SPLIT_MANIFEST) else None,
+        help="Optional JSON split manifest with source_row lists for train/val/test",
+    )
     parser.add_argument("--remove_drug_name", action="store_true",
                         help="Strip 'Drug: X.' from text_rich (leakage ablation)")
     parser.add_argument("--zero_shot_only", action="store_true",
                         help="Only evaluate zero-shot condition (no training)")
+    parser.add_argument("--condition2_only", action="store_true",
+                        help="Only run zero-shot + Condition 2 (skip Condition 3)")
     parser.add_argument("--graph_batch_size", type=int, default=32,
                         help="Batch size for frozen graph encoding (reduce if OOM)")
+    parser.add_argument("--max_nodes", type=int, default=MAX_NODE,
+                        help="Maximum graph nodes to keep before skipping oversized molecules")
+    parser.add_argument("--c2_batch_size", type=int, default=C2_BATCH_SIZE,
+                        help="Batch size for unfrozen Condition 2 training")
+    parser.add_argument("--c2_epochs", type=int, default=C2_EPOCHS,
+                        help="Epochs for unfrozen Condition 2 training")
+    parser.add_argument("--c3_batch_size", type=int, default=C3_BATCH_SIZE,
+                        help="Batch size for frozen Condition 3 projector training")
+    parser.add_argument("--c3_epochs", type=int, default=C3_EPOCHS,
+                        help="Epochs for frozen Condition 3 projector training")
     main(parser.parse_args())

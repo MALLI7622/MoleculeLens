@@ -1,0 +1,219 @@
+{
+  "generated_at_utc": "2026-05-03T21:44:17.016572+00:00",
+  "canonical_refresh_command": "bash scripts/run_paper_artifact_refresh.sh",
+  "git": {
+    "commit": "3ae5a00738fd3ed194fc581daca162d0de6ac287",
+    "dirty": true
+  },
+  "artifact_writers": {
+    "comparison": "scripts/build_paper_comparison_table.py",
+    "track1_csvs": "09b_diagonal_artifact_sync.py",
+    "track1_figures": "08c_paper_figures.py",
+    "track3_raw": "10_contrastive_logit_lens.py",
+    "track3_figures": "10b_logit_lens_figures.py",
+    "robustness_raw": "12_robustness.py",
+    "robustness_figure": "12b_robustness_figures.py"
+  },
+  "paper_outputs": {
+    "comparison_table": "results/model_comparison_table.md",
+    "comparison_manifest": "results/model_comparison_manifest.json",
+    "track1_leakage_csv": "outputs/track1/leakage_per_pair.csv",
+    "track1_wrong_close_csv": "outputs/track1/wrong_close_analysis.csv",
+    "track1_incorrect_attribution_csv": "outputs/track1/incorrect_attribution_summary.csv",
+    "track3_recall_csv": "outputs/track3/recall_by_layer.csv",
+    "track3_run_metadata": "outputs/track3/run_metadata.json",
+    "bootstrap_ci_csv": "outputs/robustness/bootstrap_ci.csv",
+    "full_loss_multiseed_csv": "outputs/robustness/full_loss_multiseed_results.csv",
+    "mechanism_only_outdir": "outputs/mechanism_only",
+    "attribution_validation_json": "results/attribution_validation.json",
+    "incorrect_attribution_json": "results/incorrect_attribution_summary.json",
+    "full_loss_multiseed_json": "results/full_loss_multiseed_summary.json",
+    "mechanism_only_json": "results/mechanism_only_ablation.json",
+    "paper_pdf": "MoleculeLens-paper/neurips_2026.pdf"
+  },
+  "comparison": {
+    "evaluation": {
+      "moleculelens_scaffold": "diagonal_optimistic",
+      "definition": "rank(i) = 1 + count_j[S[i,j] > S[i,i]]",
+      "moleculelens_leakage": "fixed_rich_gallery_text_ablation"
+    },
+    "moleculelens_scaffold": {
+      "model": "MoleculeLens (ours)",
+      "eval_set": "Held-out scaffold test from saved outputs (N=435)",
+      "metrics": {
+        "Recall@1": 0.22528735632183908,
+        "MRR": 0.3036489077322444,
+        "Recall@5": 0.3839080459770115,
+        "Recall@10": 0.46206896551724136,
+        "T=4 S->T": 0.7379310344827587,
+        "T=4 T->S": 0.7195402298850575,
+        "T=10 S->T": 0.5862068965517241,
+        "T=10 T->S": 0.5977011494252874,
+        "T=20 S->T": 0.5103448275862069,
+        "T=20 T->S": 0.503448275862069
+      },
+      "gallery_size": 435
+    },
+    "moleculelens_mechanism_only": {
+      "semantics": "MoleculeLens trained and evaluated on mechanism_of_action only; target name, action type, and explicit drug field are removed.",
+      "outdir": "outputs/mechanism_only",
+      "N": 435,
+      "Recall@1": 0.12413793103448276,
+      "MRR": 0.22573140505477596,
+      "Recall@5": 0.3310344827586207,
+      "Recall@10": 0.4528735632183908
+    }
+  },
+  "track1": {
+    "leakage_semantics": "same_model_rich_head_text_ablation",
+    "jaccard_mean": 0.3557211221297907,
+    "jaccard_std": 0.16098935316340002,
+    "jaccard_lt_0_2": 82,
+    "leakage_candidates": 13,
+    "wrong_close_pairs": 43,
+    "wrong_close_mean_rho": 0.5686375402549527,
+    "wrong_close_std_rho": 0.41344972359617727,
+    "wrong_close_rho_gt_0_5": 30,
+    "wrong_close_same_moa": 27,
+    "attribution_validation": {
+      "notes": {
+        "approximation": "Equation 2 uses the linear proxy W_m^T b_t and omits the molecule bias term and normalization denominator.",
+        "exact_score": "normalize(W_m x + b_m) dot normalize(W_t z + b_t)"
+      },
+      "per_pair_csv": "outputs/track1/attribution_validation_per_pair.csv",
+      "evaluated_pairs": 435,
+      "approx_vs_exact_gradient": {
+        "mean": 0.9046127623883419,
+        "median": 0.9585528951110589,
+        "std": 0.13639180388190386
+      },
+      "approx_vs_bit_drop": {
+        "mean": 0.9469852195015575,
+        "median": 0.9788713867166712,
+        "std": 0.07551485902606629
+      },
+      "top10_jaccard_vs_exact_gradient": {
+        "mean": 0.5953205948134954,
+        "median": 0.5384615384615384,
+        "std": 0.2441032485018101
+      },
+      "top10_jaccard_vs_bit_drop": {
+        "mean": 0.7098575303443457,
+        "median": 0.6666666666666666,
+        "std": 0.19788873138890464
+      },
+      "same_nodrug_text_drug_specificity": {
+        "group_count": 79,
+        "pair_count": 954,
+        "exact_top10_jaccard": {
+          "mean": 0.1359656091338238,
+          "median": 0.1111111111111111,
+          "std": 0.15783688802237006
+        },
+        "approx_top10_jaccard": {
+          "mean": 0.14453318520436928,
+          "median": 0.1111111111111111,
+          "std": 0.1721935807034219
+        },
+        "fraction_exact_not_identical": 0.9979035639412998
+      }
+    },
+    "incorrect_attribution": {
+      "semantics": "Attribution approximation fidelity stratified by retrieval outcome. Metrics compare Equation 2 against exact gradients and exact present-bit score drops.",
+      "all_pairs": {
+        "n": 435,
+        "pearson_vs_exact_grad_mean": 0.904612762388342,
+        "pearson_vs_bit_drop_mean": 0.9469852195015575,
+        "top10_jaccard_vs_exact_grad_mean": 0.5953205948134944,
+        "top10_jaccard_vs_bit_drop_mean": 0.709857530344345
+      },
+      "correct_at_rank1": {
+        "n": 98,
+        "pearson_vs_exact_grad_mean": 0.7562113570496762,
+        "pearson_vs_bit_drop_mean": 0.8694874349480729,
+        "top10_jaccard_vs_exact_grad_mean": 0.35483424138886327,
+        "top10_jaccard_vs_bit_drop_mean": 0.5345451867060517
+      },
+      "incorrect_at_rank1": {
+        "n": 337,
+        "pearson_vs_exact_grad_mean": 0.9477680672049281,
+        "pearson_vs_bit_drop_mean": 0.9695216672352117,
+        "top10_jaccard_vs_exact_grad_mean": 0.6652543118331199,
+        "top10_jaccard_vs_bit_drop_mean": 0.760838567960228
+      },
+      "rank_gt_10": {
+        "n": 234,
+        "pearson_vs_exact_grad_mean": 0.9769177200832515,
+        "pearson_vs_bit_drop_mean": 0.9872094828152571,
+        "top10_jaccard_vs_exact_grad_mean": 0.7584436679459295,
+        "top10_jaccard_vs_bit_drop_mean": 0.8281419435265571
+      },
+      "incorrect_count": 337,
+      "rank_gt_10_count": 234
+    }
+  },
+  "track3": {
+    "exact_replay": {
+      "model_name": "pritamdeka/S-Biomed-Roberta-snli-multinli-stsb",
+      "max_text_length": 96,
+      "evaluation": "diagonal_optimistic",
+      "gallery_rich": "Bm_test.pt",
+      "gallery_nodrug": "Bm_test.pt",
+      "leakage_semantics": "fixed_rich_gallery_text_ablation",
+      "layer12_max_abs_diff_rich": 0.0012113824486732483,
+      "layer12_max_abs_diff_nodrug": 0.0003994405269622803
+    },
+    "layer12": {
+      "text_rich": {
+        "Recall@1": 0.225287356321839,
+        "MRR": 0.3036635420582665
+      },
+      "text_nodrug": {
+        "Recall@1": 0.1126436781609195,
+        "MRR": 0.1993015480546908
+      },
+      "gap": 0.1126436781609195
+    }
+  },
+  "robustness": {
+    "bootstrap_ci": {
+      "text_rich": {
+        "Recall@1": 0.2254,
+        "ci_lo": 0.1862,
+        "ci_hi": 0.2667
+      },
+      "text_nodrug": {
+        "Recall@1": 0.1102,
+        "ci_lo": 0.0828,
+        "ci_hi": 0.1402,
+        "semantics": "retrained_no_drug_head"
+      },
+      "text_nodrug_same_model": {
+        "Recall@1": 0.0668,
+        "ci_lo": 0.0437,
+        "ci_hi": 0.092,
+        "semantics": "same_model_rich_head_text_ablation"
+      }
+    },
+    "multiseed_mean_r1_rich": 0.2129,
+    "multiseed_std_r1_rich": 0.04462824217914034,
+    "multiseed_mean_leakage_drop_pct": 22.88,
+    "full_loss_multiseed": {
+      "semantics": "full MoleculeLens loss: same-target weighting plus hardest-same-target margin",
+      "notes": "Uses cached frozen text embeddings and 90/10 scaffold splits. Seeds 0-4 were selected as the same five consecutive seeds used by the proxy multi-seed analysis before evaluating full-loss results.",
+      "csv": "outputs/robustness/full_loss_multiseed_results.csv",
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "epochs": 100,
+      "mean_R@1": 0.27688000000000007,
+      "std_R@1": 0.08110528342839325,
+      "mean_MRR": 0.35350000000000004,
+      "std_MRR": 0.08254386712530494
+    }
+  }
+}

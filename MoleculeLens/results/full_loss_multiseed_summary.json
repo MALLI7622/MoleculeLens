@@ -1,0 +1,17 @@
+{
+  "semantics": "full MoleculeLens loss: same-target weighting plus hardest-same-target margin",
+  "notes": "Uses cached frozen text embeddings and 90/10 scaffold splits. Seeds 0-4 were selected as the same five consecutive seeds used by the proxy multi-seed analysis before evaluating full-loss results.",
+  "csv": "outputs/robustness/full_loss_multiseed_results.csv",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "epochs": 100,
+  "mean_R@1": 0.27688000000000007,
+  "std_R@1": 0.08110528342839325,
+  "mean_MRR": 0.35350000000000004,
+  "std_MRR": 0.08254386712530494
+}

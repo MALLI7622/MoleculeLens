@@ -1,0 +1,9 @@
+{
+  "semantics": "MoleculeLens trained and evaluated on mechanism_of_action only; target name, action type, and explicit drug field are removed.",
+  "outdir": "outputs/mechanism_only",
+  "N": 435,
+  "Recall@1": 0.12413793103448276,
+  "MRR": 0.22573140505477596,
+  "Recall@5": 0.3310344827586207,
+  "Recall@10": 0.4528735632183908
+}

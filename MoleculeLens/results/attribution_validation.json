@@ -1,0 +1,43 @@
+{
+  "notes": {
+    "approximation": "Equation 2 uses the linear proxy W_m^T b_t and omits the molecule bias term and normalization denominator.",
+    "exact_score": "normalize(W_m x + b_m) dot normalize(W_t z + b_t)"
+  },
+  "per_pair_csv": "outputs/track1/attribution_validation_per_pair.csv",
+  "evaluated_pairs": 435,
+  "approx_vs_exact_gradient": {
+    "mean": 0.9046127623883419,
+    "median": 0.9585528951110589,
+    "std": 0.13639180388190386
+  },
+  "approx_vs_bit_drop": {
+    "mean": 0.9469852195015575,
+    "median": 0.9788713867166712,
+    "std": 0.07551485902606629
+  },
+  "top10_jaccard_vs_exact_gradient": {
+    "mean": 0.5953205948134954,
+    "median": 0.5384615384615384,
+    "std": 0.2441032485018101
+  },
+  "top10_jaccard_vs_bit_drop": {
+    "mean": 0.7098575303443457,
+    "median": 0.6666666666666666,
+    "std": 0.19788873138890464
+  },
+  "same_nodrug_text_drug_specificity": {
+    "group_count": 79,
+    "pair_count": 954,
+    "exact_top10_jaccard": {
+      "mean": 0.1359656091338238,
+      "median": 0.1111111111111111,
+      "std": 0.15783688802237006
+    },
+    "approx_top10_jaccard": {
+      "mean": 0.14453318520436928,
+      "median": 0.1111111111111111,
+      "std": 0.1721935807034219
+    },
+    "fraction_exact_not_identical": 0.9979035639412998
+  }
+}

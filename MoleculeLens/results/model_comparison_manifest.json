@@ -1,0 +1,261 @@
+{
+  "primary_rows": [
+    {
+      "model": "MoleculeSTM (zero-shot)",
+      "eval_set": "Full gallery from earlier head-to-head run (N=2699)",
+      "metrics": {
+        "Recall@1": 0.0889218228973694,
+        "MRR": 0.17109880349995998,
+        "Recall@5": 0.2434234901815487,
+        "Recall@10": 0.33679140422378656,
+        "T=4 S->T": 0.926,
+        "T=4 T->S": 0.933,
+        "T=10 S->T": 0.83,
+        "T=10 T->S": 0.862,
+        "T=20 S->T": 0.739,
+        "T=20 T->S": 0.763
+      },
+      "gallery_size": 2699
+    },
+    {
+      "model": "Thin Bridges (Global)",
+      "eval_set": "Full gallery from earlier head-to-head run (N=2699; train=test)",
+      "metrics": {
+        "Recall@1": 0.7465728047424972,
+        "MRR": 0.8494389898521059,
+        "Recall@5": 0.9848091885883661,
+        "Recall@10": 0.9970359392367544,
+        "T=4 S->T": 1.0,
+        "T=4 T->S": 0.999,
+        "T=10 S->T": 1.0,
+        "T=10 T->S": 0.997,
+        "T=20 S->T": 1.0,
+        "T=20 T->S": 0.997
+      },
+      "gallery_size": 2699
+    },
+    {
+      "model": "MoleculeLens (ours)",
+      "eval_set": "Held-out scaffold test from saved outputs (N=435)",
+      "metrics": {
+        "Recall@1": 0.22528735632183908,
+        "MRR": 0.3036489077322444,
+        "Recall@5": 0.3839080459770115,
+        "Recall@10": 0.46206896551724136,
+        "T=4 S->T": 0.7379310344827587,
+        "T=4 T->S": 0.7195402298850575,
+        "T=10 S->T": 0.5862068965517241,
+        "T=10 T->S": 0.5977011494252874,
+        "T=20 S->T": 0.5103448275862069,
+        "T=20 T->S": 0.503448275862069
+      },
+      "gallery_size": 435
+    },
+    {
+      "model": "MolPrompt (Scaffold)",
+      "eval_set": "Held-out shared/scaffold split from saved NPZ (N=435)",
+      "metrics": {
+        "Recall@1": 0.12873563170433044,
+        "MRR": 0.25645408034324646,
+        "Recall@5": 0.4000000059604645,
+        "Recall@10": 0.5310344696044922,
+        "T=4 S->T": 0.8344827586206897,
+        "T=4 T->S": 0.8344827586206897,
+        "T=10 S->T": 0.7149425287356321,
+        "T=10 T->S": 0.7011494252873564,
+        "T=20 S->T": 0.5770114942528736,
+        "T=20 T->S": 0.5540229885057472
+      },
+      "gallery_size": 435
+    },
+    {
+      "model": "KV-PLM (Scaffold)",
+      "eval_set": "Held-out aligned scaffold test (N=435)",
+      "metrics": {
+        "Recall@1": 0.05517241379310345,
+        "MRR": 0.12066567015324214,
+        "Recall@5": 0.1724137931034483,
+        "Recall@10": 0.25057471264367814,
+        "T=4 S->T": 0.639080459770115,
+        "T=4 T->S": 0.6574712643678161,
+        "T=10 S->T": 0.4298850574712644,
+        "T=10 T->S": 0.432183908045977,
+        "T=20 S->T": 0.3103448275862069,
+        "T=20 T->S": 0.30114942528735633
+      },
+      "gallery_size": 435
+    }
+  ],
+  "leakage_rows": [
+    {
+      "model": "MoleculeSTM (zero-shot)",
+      "eval_set": "Full gallery from earlier head-to-head run (N=2699)",
+      "with": {
+        "Recall@1": 0.0889218228973694,
+        "MRR": 0.17109880349995998,
+        "Recall@5": 0.2434234901815487,
+        "Recall@10": 0.33679140422378656,
+        "T=4 S->T": 0.926,
+        "T=4 T->S": 0.933,
+        "T=10 S->T": 0.83,
+        "T=10 T->S": 0.862,
+        "T=20 S->T": 0.739,
+        "T=20 T->S": 0.763
+      },
+      "without": {
+        "Recall@1": 0.014449796220822526,
+        "MRR": 0.04435078531523051,
+        "Recall@5": 0.060392738051130046,
+        "Recall@10": 0.09188588366061504,
+        "T=4 S->T": 0.695,
+        "T=4 T->S": 0.742,
+        "T=10 S->T": 0.514,
+        "T=10 T->S": 0.599,
+        "T=20 S->T": 0.375,
+        "T=20 T->S": 0.475
+      },
+      "with_source": "/home/cheriearjun/MoleculeLens/outputs/comparison_withdrug/comparison_results.csv",
+      "without_source": "/home/cheriearjun/MoleculeLens/outputs/comparison_nodrug/comparison_results.csv"
+    },
+    {
+      "model": "Thin Bridges (Global)",
+      "eval_set": "Full gallery from earlier head-to-head run (N=2699; train=test)",
+      "with": {
+        "Recall@1": 0.7465728047424972,
+        "MRR": 0.8494389898521059,
+        "Recall@5": 0.9848091885883661,
+        "Recall@10": 0.9970359392367544,
+        "T=4 S->T": 1.0,
+        "T=4 T->S": 0.999,
+        "T=10 S->T": 1.0,
+        "T=10 T->S": 0.997,
+        "T=20 S->T": 1.0,
+        "T=20 T->S": 0.997
+      },
+      "without": {
+        "Recall@1": 0.14523897739903668,
+        "MRR": 0.2504275652616889,
+        "Recall@5": 0.36606150426083733,
+        "Recall@10": 0.4579473879214524,
+        "T=4 S->T": 0.788,
+        "T=4 T->S": 0.89,
+        "T=10 S->T": 0.681,
+        "T=10 T->S": 0.801,
+        "T=20 S->T": 0.586,
+        "T=20 T->S": 0.744
+      },
+      "with_source": "/home/cheriearjun/MoleculeLens/outputs/comparison_withdrug/comparison_results.csv",
+      "without_source": "/home/cheriearjun/MoleculeLens/outputs/comparison_nodrug/comparison_results.csv"
+    },
+    {
+      "model": "MoleculeLens (ours)",
+      "eval_set": "Held-out scaffold test from saved outputs (N=435)",
+      "with": {
+        "Recall@1": 0.22528735632183908,
+        "MRR": 0.3036489077322444,
+        "Recall@5": 0.3839080459770115,
+        "Recall@10": 0.46206896551724136,
+        "T=4 S->T": 0.7379310344827587,
+        "T=4 T->S": 0.7195402298850575,
+        "T=10 S->T": 0.5862068965517241,
+        "T=10 T->S": 0.5977011494252874,
+        "T=20 S->T": 0.5103448275862069,
+        "T=20 T->S": 0.503448275862069
+      },
+      "without": {
+        "Recall@1": 0.1103448275862069,
+        "MRR": 0.1979107975314047,
+        "Recall@5": 0.2850574712643678,
+        "Recall@10": 0.3701149425287356,
+        "T=4 S->T": 0.6160919540229886,
+        "T=4 T->S": 0.6367816091954023,
+        "T=10 S->T": 0.5080459770114942,
+        "T=10 T->S": 0.5172413793103449,
+        "T=20 S->T": 0.42298850574712643,
+        "T=20 T->S": 0.45057471264367815
+      },
+      "with_source": "/home/cheriearjun/MoleculeLens/outputs/Bt_test.pt",
+      "without_source": "/home/cheriearjun/MoleculeLens/outputs/Bt_test_nodrug.pt"
+    },
+    {
+      "model": "MolPrompt (Scaffold)",
+      "eval_set": "Held-out shared/scaffold split from saved NPZ (N=435)",
+      "with": {
+        "Recall@1": 0.12873563170433044,
+        "MRR": 0.25645408034324646,
+        "Recall@5": 0.4000000059604645,
+        "Recall@10": 0.5310344696044922,
+        "T=4 S->T": 0.8344827586206897,
+        "T=4 T->S": 0.8344827586206897,
+        "T=10 S->T": 0.7149425287356321,
+        "T=10 T->S": 0.7011494252873564,
+        "T=20 S->T": 0.5770114942528736,
+        "T=20 T->S": 0.5540229885057472
+      },
+      "without": {
+        "Recall@1": 0.0712643712759018,
+        "MRR": 0.17798636853694916,
+        "Recall@5": 0.28045976161956787,
+        "Recall@10": 0.41379308700561523,
+        "T=4 S->T": 0.7632183908045977,
+        "T=4 T->S": 0.7724137931034483,
+        "T=10 S->T": 0.6137931034482759,
+        "T=10 T->S": 0.6137931034482759,
+        "T=20 S->T": 0.496551724137931,
+        "T=20 T->S": 0.5218390804597701
+      },
+      "with_source": "/home/cheriearjun/MolPrompt/save_model/retrieval_chembl_sharedsplit_bs6/chembl_retrieval_best_metrics.npz",
+      "without_source": "/home/cheriearjun/MolPrompt/save_model/retrieval_chembl_sharedsplit_bs6_nodrug/chembl_retrieval_best_metrics.npz"
+    },
+    {
+      "model": "KV-PLM (Scaffold)",
+      "eval_set": "Held-out aligned scaffold test (N=435)",
+      "with": {
+        "Recall@1": 0.05517241379310345,
+        "MRR": 0.12066567015324214,
+        "Recall@5": 0.1724137931034483,
+        "Recall@10": 0.25057471264367814,
+        "T=4 S->T": 0.639080459770115,
+        "T=4 T->S": 0.6574712643678161,
+        "T=10 S->T": 0.4298850574712644,
+        "T=10 T->S": 0.432183908045977,
+        "T=20 S->T": 0.3103448275862069,
+        "T=20 T->S": 0.30114942528735633
+      },
+      "without": {
+        "Recall@1": 0.034482758620689655,
+        "MRR": 0.0835323926468682,
+        "Recall@5": 0.1103448275862069,
+        "Recall@10": 0.1793103448275862,
+        "T=4 S->T": 0.5747126436781609,
+        "T=4 T->S": 0.5540229885057472,
+        "T=10 S->T": 0.3563218390804598,
+        "T=10 T->S": 0.3632183908045977,
+        "T=20 S->T": 0.25287356321839083,
+        "T=20 T->S": 0.23448275862068965
+      },
+      "with_source": "/home/cheriearjun/MoleculeLens/results/kv_plm_aligned.json",
+      "without_source": "/home/cheriearjun/MoleculeLens/results/kv_plm_aligned_nodrug.json"
+    }
+  ],
+  "evaluation": {
+    "moleculelens_scaffold": "diagonal_optimistic",
+    "definition": "rank(i) = 1 + count_j[S[i,j] > S[i,i]]",
+    "moleculelens_leakage": "fixed_rich_gallery_text_ablation"
+  },
+  "inputs": {
+    "with_csv": "/home/cheriearjun/MoleculeLens/outputs/comparison_withdrug/comparison_results.csv",
+    "nodrug_csv": "/home/cheriearjun/MoleculeLens/outputs/comparison_nodrug/comparison_results.csv",
+    "scaffold_outdir": "/home/cheriearjun/MoleculeLens/outputs",
+    "molprompt_with_npz": "/home/cheriearjun/MolPrompt/save_model/retrieval_chembl_sharedsplit_bs6/chembl_retrieval_best_metrics.npz",
+    "molprompt_nodrug_npz": "/home/cheriearjun/MolPrompt/save_model/retrieval_chembl_sharedsplit_bs6_nodrug/chembl_retrieval_best_metrics.npz",
+    "molprompt_global_with_npz": null,
+    "molprompt_global_nodrug_npz": null,
+    "kvplm_with_json": "/home/cheriearjun/MoleculeLens/results/kv_plm_aligned.json",
+    "kvplm_nodrug_json": "/home/cheriearjun/MoleculeLens/results/kv_plm_aligned_nodrug.json",
+    "kvplm_global_with_json": null,
+    "kvplm_global_nodrug_json": null,
+    "graphormer_global_with_csv": null,
+    "graphormer_global_nodrug_csv": null
+  }
+}

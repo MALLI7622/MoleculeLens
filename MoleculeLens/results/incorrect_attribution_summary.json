@@ -1,0 +1,33 @@
+{
+  "semantics": "Attribution approximation fidelity stratified by retrieval outcome. Metrics compare Equation 2 against exact gradients and exact present-bit score drops.",
+  "all_pairs": {
+    "n": 435,
+    "pearson_vs_exact_grad_mean": 0.904612762388342,
+    "pearson_vs_bit_drop_mean": 0.9469852195015575,
+    "top10_jaccard_vs_exact_grad_mean": 0.5953205948134944,
+    "top10_jaccard_vs_bit_drop_mean": 0.709857530344345
+  },
+  "correct_at_rank1": {
+    "n": 98,
+    "pearson_vs_exact_grad_mean": 0.7562113570496762,
+    "pearson_vs_bit_drop_mean": 0.8694874349480729,
+    "top10_jaccard_vs_exact_grad_mean": 0.35483424138886327,
+    "top10_jaccard_vs_bit_drop_mean": 0.5345451867060517
+  },
+  "incorrect_at_rank1": {
+    "n": 337,
+    "pearson_vs_exact_grad_mean": 0.9477680672049281,
+    "pearson_vs_bit_drop_mean": 0.9695216672352117,
+    "top10_jaccard_vs_exact_grad_mean": 0.6652543118331199,
+    "top10_jaccard_vs_bit_drop_mean": 0.760838567960228
+  },
+  "rank_gt_10": {
+    "n": 234,
+    "pearson_vs_exact_grad_mean": 0.9769177200832515,
+    "pearson_vs_bit_drop_mean": 0.9872094828152571,
+    "top10_jaccard_vs_exact_grad_mean": 0.7584436679459295,
+    "top10_jaccard_vs_bit_drop_mean": 0.8281419435265571
+  },
+  "incorrect_count": 337,
+  "rank_gt_10_count": 234
+}

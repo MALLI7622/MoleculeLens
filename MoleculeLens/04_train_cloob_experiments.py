@@ -108,6 +108,12 @@ VARIANT_DESCRIPTIONS = {
     "D": "InfoLOOB + Hopfield     (full CLOOB — proposed)",
 }
 
+DEFAULT_SPLIT_MANIFEST = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "splits",
+    "chembl_scaffold_seed0_train80_val10_test10.json",
+)
+
 # =============================================================================
 # REPRODUCIBILITY
 # =============================================================================
@@ -138,6 +144,34 @@ def murcko_scaffold(smi):
         return None
     core = MurckoScaffold.GetScaffoldForMol(m)
     return Chem.MolToSmiles(core) if core else None
+
+
+def load_manifest_split(df, manifest_path):
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    split_rows = manifest.get("splits", {})
+    required = ("train", "test")
+    missing = [name for name in required if name not in split_rows]
+    if missing:
+        raise ValueError(f"Split manifest missing required splits: {missing}")
+
+    source_to_pos = {int(src): pos for pos, src in enumerate(df["source_row"].tolist())}
+
+    def _take(split_name):
+        source_rows = split_rows.get(split_name, [])
+        missing_rows = [int(src) for src in source_rows if int(src) not in source_to_pos]
+        if missing_rows:
+            raise ValueError(
+                f"Manifest rows for split '{split_name}' are not present after filtering: {missing_rows[:5]}"
+            )
+        positions = [source_to_pos[int(src)] for src in source_rows]
+        return df.iloc[positions].reset_index(drop=True)
+
+    train_df = _take("train")
+    val_df = _take("val") if "val" in split_rows else pd.DataFrame(columns=df.columns)
+    test_df = _take("test")
+    return manifest, train_df, val_df, test_df
 
 
 # =============================================================================
@@ -794,13 +828,13 @@ def print_summary_table(all_results: list):
 # =============================================================================
 # DATA LOADING & SCAFFOLD SPLIT (identical to baseline 03_train_scaffold_split.py)
 # =============================================================================
-def load_and_split(csv_path: str, remove_drug_name: bool, device: str):
+def load_and_split(csv_path: str, remove_drug_name: bool, device: str, split_manifest: str = None):
     """
     Load ChEMBL data, apply scaffold split, encode features.
     Text encoder and ECFP4 encoder are BOTH frozen.
     Returns numpy arrays + DataFrames.
     """
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path).reset_index().rename(columns={"index": "source_row"})
     need_cols = {"smiles", "text_rich", "target_chembl_id"}
     missing = need_cols - set(df.columns)
     if missing:
@@ -813,19 +847,26 @@ def load_and_split(csv_path: str, remove_drug_name: bool, device: str):
             r"Drug:\s*[^.]+\. ?", "", regex=True).str.strip()
         print("  [Leakage ablation] Drug names stripped from text_rich")
 
-    # Scaffold split (Bemis-Murcko, 90/10, seed=0)
+    # Scaffold split
     print("  Computing Murcko scaffolds ...")
     df["scaffold"] = df["smiles"].apply(murcko_scaffold)
     df = df.dropna(subset=["scaffold"]).reset_index(drop=True)
-    scaffolds = df["scaffold"].unique()
-    rng = np.random.default_rng(SEED)
-    rng.shuffle(scaffolds)
-    cut         = int(0.9 * len(scaffolds))
-    train_scafs = set(scaffolds[:cut])
-    test_scafs  = set(scaffolds[cut:])
-    train_df = df[df["scaffold"].isin(train_scafs)].reset_index(drop=True)
-    test_df  = df[df["scaffold"].isin(test_scafs)].reset_index(drop=True)
-    print(f"  Scaffold split → train: {len(train_df)} | test: {len(test_df)}")
+    if split_manifest:
+        manifest, train_df, val_df, test_df = load_manifest_split(df, split_manifest)
+        print(f"  Manifest split → train: {len(train_df)} | val: {len(val_df)} | test: {len(test_df)}")
+        print(f"  Split manifest    → {split_manifest}")
+        if manifest.get("seed") is not None:
+            print(f"  Manifest seed     → {manifest['seed']}")
+    else:
+        scaffolds = df["scaffold"].unique()
+        rng = np.random.default_rng(SEED)
+        rng.shuffle(scaffolds)
+        cut         = int(0.9 * len(scaffolds))
+        train_scafs = set(scaffolds[:cut])
+        test_scafs  = set(scaffolds[cut:])
+        train_df = df[df["scaffold"].isin(train_scafs)].reset_index(drop=True)
+        test_df  = df[df["scaffold"].isin(test_scafs)].reset_index(drop=True)
+        print(f"  Scaffold split → train: {len(train_df)} | test: {len(test_df)}")
 
     # ECFP4 fingerprints (frozen)
     print("  Computing ECFP4 fingerprints ...")
@@ -893,7 +934,11 @@ def main(args):
         print(f"\nLoading and encoding data ({cond_label}) ...")
         (Z_text_train, X_mol_train, train_df,
          Z_text_test,  X_mol_test,  test_df) = load_and_split(
-            args.csv, remove_drug_name=remove_drug, device=device)
+            args.csv,
+            remove_drug_name=remove_drug,
+            device=device,
+            split_manifest=args.split_manifest,
+        )
 
         for variant in variants_to_run:
             results = run_variant(
@@ -936,6 +981,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--outdir", type=str, default="outputs_cloob",
         help="Directory for all experiment outputs")
+
+    parser.add_argument(
+        "--split_manifest", type=str,
+        default=DEFAULT_SPLIT_MANIFEST if os.path.exists(DEFAULT_SPLIT_MANIFEST) else None,
+        help="Optional JSON split manifest with source_row lists for train/val/test")
 
     parser.add_argument(
         "--variant", type=str, default="all",

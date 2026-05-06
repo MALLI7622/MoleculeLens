@@ -23,7 +23,7 @@ Outputs: MoleculeLens-paper/figures/fig_molecular_lens.pdf
                                      fig_wrong_close.pdf
 """
 
-import os, io, textwrap
+import os, io, textwrap, shutil
 import numpy as np
 import pandas as pd
 import torch
@@ -42,16 +42,30 @@ from rdkit.Chem import AllChem
 from rdkit.Chem.Draw import rdMolDraw2D
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
-os.makedirs("MoleculeLens-paper/figures", exist_ok=True)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+PAPER_FIG_DIR = os.path.join(SCRIPT_DIR, "MoleculeLens-paper", "figures")
+ROOT_FIG_DIR = os.path.join(REPO_ROOT, "figures")
+os.makedirs(PAPER_FIG_DIR, exist_ok=True)
+os.makedirs(ROOT_FIG_DIR, exist_ok=True)
+
+
+def save_and_mirror(fig, stem, *, dpi=300, pad_inches=0.02):
+    pdf_path = os.path.join(PAPER_FIG_DIR, f"{stem}.pdf")
+    png_path = os.path.join(PAPER_FIG_DIR, f"{stem}.png")
+    fig.savefig(pdf_path, bbox_inches="tight", pad_inches=pad_inches, dpi=dpi)
+    fig.savefig(png_path, bbox_inches="tight", pad_inches=pad_inches, dpi=dpi)
+    shutil.copy(pdf_path, os.path.join(ROOT_FIG_DIR, f"{stem}.pdf"))
+    shutil.copy(png_path, os.path.join(ROOT_FIG_DIR, f"{stem}.png"))
 
 # ── shared style ────────────────────────────────────────────────────────────
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
-    "font.size": 8,
-    "axes.labelsize": 8,
-    "axes.titlesize": 9,
-    "xtick.labelsize": 7,
-    "ytick.labelsize": 7,
+    "font.size": 12,
+    "axes.labelsize": 11,
+    "axes.titlesize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
     "axes.linewidth": 0.8,
     "axes.spines.top": False,
     "axes.spines.right": False,
@@ -231,10 +245,10 @@ K_BITS = 6
 # A stacked row layout is more readable than a dense 2x2 grid. Keep the source
 # figure close to manuscript-page proportions so LaTeX does not shrink labels
 # into unreadability when included at \linewidth.
-fig1 = plt.figure(figsize=(7.4, 10.2))
+fig1 = plt.figure(figsize=(8.1, 10.4))
 outer = gridspec.GridSpec(
     len(CASES), 1, figure=fig1,
-    hspace=0.58, top=0.965, bottom=0.080, left=0.045, right=0.985
+    hspace=0.52, top=0.965, bottom=0.080, left=0.045, right=0.985
 )
 
 for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
@@ -263,7 +277,7 @@ for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
     sim_score = (Bm[drug_idx] @ Bt[drug_idx]).item()
     ax_mol.set_title(
         f"({chr(65+panel_idx)}) {name}\n{mech}",
-        fontsize=10.5, fontweight="bold", pad=4, loc="left"
+        fontsize=14.0, fontweight="bold", pad=4, loc="left"
     )
 
     bits_rev = bits[::-1]
@@ -275,19 +289,20 @@ for panel_idx, (drug_idx, name, mech, expected) in enumerate(CASES):
     colours = [CMAP_ATTR(0.85) if v > 0 else CMAP_ATTR(0.15) for v in vals_rev]
     ax_bar.barh(range(K_BITS), vals_rev, color=colours, height=0.56, edgecolor="none")
     ax_bar.axvline(0, color="#333333", lw=0.8, zorder=3)
-    ax_bar.set_xlabel("Attribution score", fontsize=8.5)
+    ax_bar.set_xlabel("Attribution score", fontsize=12.0)
     ax_bar.set_title(f"Top-{K_BITS} ECFP4 bit attributions\n(sim={sim_score:.3f})",
-                     fontsize=9.5, pad=4)
+                     fontsize=13.0, pad=4)
 
     bit_labels = [f"bit {int(b)} / {decode_bit_label(mol, info, b)}" for b in bits_rev]
     ax_bar.set_yticks(range(K_BITS))
-    ax_bar.set_yticklabels(bit_labels, fontsize=7.6)
+    ax_bar.set_yticklabels(bit_labels, fontsize=10.6)
+    ax_bar.tick_params(axis="x", labelsize=10.8)
     ax_bar.tick_params(axis="y", pad=3)
     ax_bar.grid(axis="x", color="#dddddd", lw=0.5, alpha=0.8)
 
     # Expected pharmacophore annotation
     ax_mol.text(0.02, 0.02, f"Expected:\n{expected}",
-                transform=ax_mol.transAxes, fontsize=7.2,
+                transform=ax_mol.transAxes, fontsize=10.6,
                 ha="left", va="bottom", color="#555555",
                 bbox=dict(boxstyle="round,pad=0.32", fc="#f7f7f7", ec="#cccccc", lw=0.6))
 
@@ -297,15 +312,12 @@ sm = plt.cm.ScalarMappable(cmap=CMAP_ATTR, norm=Normalize(vmin=-1, vmax=1))
 sm.set_array([])
 cb = fig1.colorbar(sm, cax=cbar_ax, orientation="horizontal")
 cb.set_ticks([-1, 0, 1])
-cb.set_ticklabels(["pushes away\nfrom text", "neutral", "pushes toward\ntext"], fontsize=7.5)
+cb.set_ticklabels(["pushes away\nfrom text", "neutral", "pushes toward\ntext"], fontsize=10.8)
 cb.ax.tick_params(size=0)
-cbar_ax.set_title("ECFP4 bit attribution", fontsize=8.0, pad=2)
+cbar_ax.set_title("ECFP4 bit attribution", fontsize=11.2, pad=2)
 
 
-fig1.savefig("MoleculeLens-paper/figures/fig_molecular_lens.pdf",
-             bbox_inches="tight", dpi=300)
-fig1.savefig("MoleculeLens-paper/figures/fig_molecular_lens.png",
-             bbox_inches="tight", dpi=300)
+save_and_mirror(fig1, "fig_molecular_lens", dpi=300, pad_inches=0.02)
 plt.close(fig1)
 print("Saved: fig_molecular_lens.pdf/.png")
 
@@ -345,14 +357,14 @@ bits_r,  vals_r  = top_bits(info_lk, av_rich,   k=10)
 bits_nd, vals_nd = top_bits(info_lk, av_nodrug, k=10)
 atom_cols_r,  _ = atom_colours_from_bits(mol_lk, info_lk, bits_r,  av_rich)
 atom_cols_nd, _ = atom_colours_from_bits(mol_lk, info_lk, bits_nd, av_nodrug)
-img_r  = render_mol(smiles_lk, atom_cols_r,  size=(250, 180))
-img_nd = render_mol(smiles_lk, atom_cols_nd, size=(250, 180))
+img_r  = render_mol(smiles_lk, atom_cols_r,  size=(310, 220))
+img_nd = render_mol(smiles_lk, atom_cols_nd, size=(310, 220))
 
-fig2 = plt.figure(figsize=(10.6, 3.15))
+fig2 = plt.figure(figsize=(10.8, 4.6))
 gs2 = gridspec.GridSpec(
-    1, 5, figure=fig2, wspace=0.36,
-    left=0.065, right=0.985, bottom=0.20, top=0.84,
-    width_ratios=[1.25, 0.04, 1.42, 0.04, 1.42]
+    1, 5, figure=fig2, wspace=0.40,
+    left=0.070, right=0.985, bottom=0.28, top=0.78,
+    width_ratios=[1.30, 0.04, 1.46, 0.04, 1.46]
 )
 
 # ── Panel A: Jaccard histogram ───────────────────────────────────────────
@@ -364,12 +376,15 @@ ax_hist.axvline(jac_vals.mean(), color="#e45756", lw=1.5, ls="--",
 ax_hist.axvspan(0, 0.2, alpha=0.12, color="#e45756", label="leakage zone (<0.2)")
 n_leakage = (jac_vals < 0.2).sum()
 ax_hist.text(0.10, ax_hist.get_ylim()[1]*0.88 if ax_hist.get_ylim()[1] > 0 else 30,
-             f"{n_leakage}/{len(jac_vals)}\npairs", ha="center", fontsize=7,
+             f"{n_leakage}/{len(jac_vals)}\npairs", ha="center", fontsize=15.0,
              color="#e45756", fontweight="bold")
-ax_hist.set_xlabel("Jaccard overlap of top-10\nattribution bits (rich vs nodrug)")
-ax_hist.set_ylabel("# test pairs")
-ax_hist.set_title("(A) Same-model attribution stability\nunder drug-name removal", fontweight="bold")
-ax_hist.legend(fontsize=6.5, frameon=False)
+ax_hist.set_xlabel("Jaccard overlap of top-10\nattribution bits (rich vs nodrug)",
+                   fontsize=17.0)
+ax_hist.set_ylabel("# test pairs", fontsize=17.0)
+ax_hist.set_title("(A) Attribution stability\nafter name removal",
+                  fontsize=17.0, fontweight="bold")
+ax_hist.tick_params(axis="both", labelsize=15.0)
+ax_hist.legend(fontsize=14.5, frameon=False)
 
 # ── Panels B & C: attribution bars rich vs nodrug ───────────────────────
 for col_idx, (bits, vals, label, correct_str, bar_col) in enumerate([
@@ -381,24 +396,23 @@ for col_idx, (bits, vals, label, correct_str, bar_col) in enumerate([
     ax.barh(range(len(bits)), vals[::-1], color=colours_b[::-1],
             height=0.65, edgecolor="none")
     ax.set_yticks(range(len(bits)))
-    ax.set_yticklabels([f"bit {b}" for b in bits[::-1]], fontsize=6.5)
+    ax.set_yticklabels([f"bit {b}" for b in bits[::-1]], fontsize=15.0)
     ax.axvline(0, color="#333333", lw=0.7, zorder=3)
-    ax.set_xlabel("Attribution")
+    ax.set_xlabel("Attribution", fontsize=17.0)
+    ax.tick_params(axis="x", labelsize=15.0)
     cond_char = "B" if col_idx == 0 else "C"
-    ax.set_title(f"({cond_char}) {name_lk}  —  {label}", fontweight="bold",
-                 fontsize=8, color=bar_col)
+    short_label = "rich query\n(rank 1 correct)" if col_idx == 0 else "no-name query\n(rank 1 wrong)"
+    ax.set_title(f"({cond_char}) {short_label}", fontweight="bold",
+                 fontsize=16.2, color=bar_col)
     # embed molecule image
     inset = ax.inset_axes([0.58, 0.50, 0.38, 0.42])
     img_to_show = img_r if col_idx == 0 else img_nd
     if img_to_show:
         inset.imshow(img_to_show)
     inset.axis("off")
-    inset.set_title("atoms coloured\nby attribution", fontsize=5.5, pad=1)
+    inset.set_title("atoms coloured\nby attribution", fontsize=13.0, pad=1)
 
-fig2.savefig("MoleculeLens-paper/figures/fig_leakage_substructure.pdf",
-             bbox_inches="tight", pad_inches=0.02, dpi=300)
-fig2.savefig("MoleculeLens-paper/figures/fig_leakage_substructure.png",
-             bbox_inches="tight", pad_inches=0.02, dpi=300)
+save_and_mirror(fig2, "fig_leakage_substructure", dpi=300, pad_inches=0.02)
 plt.close(fig2)
 print("Saved: fig_leakage_substructure.pdf/.png")
 
@@ -408,11 +422,11 @@ print("Saved: fig_leakage_substructure.pdf/.png")
 # Left: correlation histogram   Right: representative high-correlation pair
 # ═══════════════════════════════════════════════════════════════════════════
 
-fig3 = plt.figure(figsize=(10.4, 3.05))
+fig3 = plt.figure(figsize=(10.8, 4.45))
 gs3 = gridspec.GridSpec(
-    1, 2, figure=fig3, wspace=0.28,
-    left=0.07, right=0.985, bottom=0.20, top=0.82,
-    width_ratios=[1.08, 1.92]
+    1, 2, figure=fig3, wspace=0.34,
+    left=0.070, right=0.985, bottom=0.27, top=0.78,
+    width_ratios=[1.12, 1.88]
 )
 
 # ── Panel A: correlation histogram ──────────────────────────────────────
@@ -423,10 +437,13 @@ ax_corr.axvline(corr_vals.mean(), color="#e45756", lw=1.5, ls="--",
                 label=f"mean = {corr_vals.mean():.3f}")
 ax_corr.axvspan(0.5, 1.0, alpha=0.10, color="#2ca02c",
                 label=f"chemically reasonable\n(ρ > 0.5):  {(corr_vals>0.5).sum()}/{len(corr_vals)}")
-ax_corr.set_xlabel("Attribution correlation\n(correct drug vs retrieved drug)")
-ax_corr.set_ylabel("# rank-2/3 error pairs")
-ax_corr.set_title("(A) Are rank-2/3 errors\nchemically reasonable?", fontweight="bold")
-ax_corr.legend(fontsize=6.5, frameon=False)
+ax_corr.set_xlabel("Attribution correlation\n(correct drug vs retrieved drug)",
+                   fontsize=17.0)
+ax_corr.set_ylabel("# rank-2/3 error pairs", fontsize=17.0)
+ax_corr.set_title("(A) Are rank-2/3 errors\nchemically reasonable?",
+                  fontsize=17.0, fontweight="bold")
+ax_corr.tick_params(axis="both", labelsize=15.0)
+ax_corr.legend(fontsize=14.5, frameon=False)
 
 # ── Panel B: representative high-correlation pair ───────────────────────
 wrow = wdf.nlargest(1, "attr_correlation").iloc[0]
@@ -449,41 +466,37 @@ shared_bits   = set(info_c.keys()) & set(info_r.keys())
 # colour shared bits by attribution on each drug
 ac_c, _ = atom_colours_from_bits(mol_c, info_c, list(shared_bits)[:12], av_c)
 ac_r, _ = atom_colours_from_bits(mol_r, info_r, list(shared_bits)[:12], av_r)
-img_c   = render_mol(s_c, ac_c, size=(245, 170))
-img_r   = render_mol(s_r, ac_r, size=(245, 170))
+img_c   = render_mol(s_c, ac_c, size=(310, 220))
+img_r   = render_mol(s_r, ac_r, size=(310, 220))
 
 inner3 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs3[1],
-                                          width_ratios=[1, 0.18, 1], wspace=0.0)
+                                          width_ratios=[1, 0.36, 1], wspace=0.06)
 ax_c   = fig3.add_subplot(inner3[0])
 ax_mid = fig3.add_subplot(inner3[1])
 ax_r   = fig3.add_subplot(inner3[2])
 
-for ax, img, label, rank_label in [
-    (ax_c, img_c, n_c, "correct (rank 2)"),
-    (ax_r, img_r, n_r, "retrieved (rank 1)"),
+for ax, img, label in [
+    (ax_c, img_c, "Correct\nrank 2"),
+    (ax_r, img_r, "Retrieved\nrank 1"),
 ]:
     if img:
         ax.imshow(img)
     ax.axis("off")
-    ax.set_title(f"{label}\n({rank_label})", fontsize=8, fontweight="bold",
-                 pad=3)
+    ax.set_title(label, fontsize=16.2, fontweight="bold", pad=3)
 
 # central annotation
 ax_mid.axis("off")
 ax_mid.text(0.5, 0.55, f"ρ = {corr_val:.2f}", ha="center", va="center",
-            fontsize=11, fontweight="bold", color="#2ca02c",
+            fontsize=18.0, fontweight="bold", color="#2ca02c",
             transform=ax_mid.transAxes)
 ax_mid.text(0.5, 0.38, f"{len(shared_bits)}\nshared\nbits", ha="center", va="center",
-            fontsize=7, color="#555555", transform=ax_mid.transAxes)
+            fontsize=13.5, color="#555555", transform=ax_mid.transAxes)
 ax_mid.text(0.5, 0.18, "same\nMOA" if same_moa else "diff.\nMOA",
-            ha="center", va="center", fontsize=7,
+            ha="center", va="center", fontsize=13.5,
             color="#2ca02c" if same_moa else "#e45756",
             transform=ax_mid.transAxes)
 
-fig3.savefig("MoleculeLens-paper/figures/fig_wrong_close.pdf",
-             bbox_inches="tight", pad_inches=0.02, dpi=300)
-fig3.savefig("MoleculeLens-paper/figures/fig_wrong_close.png",
-             bbox_inches="tight", pad_inches=0.02, dpi=300)
+save_and_mirror(fig3, "fig_wrong_close", dpi=300, pad_inches=0.02)
 plt.close(fig3)
 print("Saved: fig_wrong_close.pdf/.png")
 

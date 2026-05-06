@@ -16,6 +16,7 @@ Fixes applied vs original notebook:
 
 NEW:
   - --remove_drug_name strips "Drug: X." from text_rich before encoding
+  - --text_field supports stricter text ablations such as mechanism_of_action
   - All output filenames get a "_nodrug" suffix when flag is set, so both
     conditions coexist in the same --outdir without overwriting each other
 
@@ -37,6 +38,10 @@ Usage:
     # Leakage ablation (drug name stripped)
     python 03_train_scaffold_split.py --csv chembl_mechanisms.csv --outdir outputs \\
         --remove_drug_name
+
+    # Mechanism-only ablation
+    python 03_train_scaffold_split.py --csv chembl_mechanisms.csv \\
+        --outdir outputs/mechanism_only --text_field mechanism_of_action
 """
 
 import os
@@ -44,6 +49,7 @@ import copy
 import math
 import random
 import argparse
+import json
 import numpy as np
 import pandas as pd
 import torch
@@ -58,13 +64,18 @@ from rdkit.Chem.Scaffolds import MurckoScaffold
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import seaborn as sns
+
+from paper_eval_utils import (
+    DEFAULT_TEXT_MAX_LENGTH,
+    diagonal_metric_summary,
+    grouped_diagonal_recall_at1,
+)
 
 # ---------------------------------------------------------------------------
 # Config (matches paper Section 3)
 # ---------------------------------------------------------------------------
 TEXT_MODEL   = "pritamdeka/S-Biomed-Roberta-snli-multinli-stsb"
-MAX_TXT_LEN  = 96
+MAX_TXT_LEN  = DEFAULT_TEXT_MAX_LENGTH
 BATCH_SIZE   = 512
 EPOCHS       = 100        # FIX #8: was 101 in original (EPOCHS=101, range 1..101)
 LR           = 1e-3
@@ -203,16 +214,8 @@ def embed_side(Z_text, X_mol, proj_text, proj_mol, device):
 
 
 def recall_mrr(S_np):
-    N = S_np.shape[0]
-    gt   = np.arange(N)
-    top1 = S_np.argmax(axis=1)
-    recall1 = (top1 == gt).mean()
-    ranks = []
-    for i in range(N):
-        order    = np.argsort(-S_np[i])
-        rank_pos = int(np.where(order == i)[0][0]) + 1
-        ranks.append(1.0 / rank_pos)
-    return float(recall1), float(np.mean(ranks))
+    metrics = diagonal_metric_summary(S_np, ks=(1, 5, 10))
+    return metrics["Recall@1"], metrics["MRR"]
 
 
 # FIX #6: single definition with min_group parameter (was defined 3x in original)
@@ -220,29 +223,13 @@ def grouped_recall_at1(S_np, meta_df, group_col="target_chembl_id", min_group=3)
     """Recall@1 computed within each target group, micro-averaged."""
     assert S_np.shape[0] == S_np.shape[1] == len(meta_df)
     groups = meta_df[group_col].fillna("UNK").astype(str).values
-    idx_by_group = {}
-    for i, g in enumerate(groups):
-        idx_by_group.setdefault(g, []).append(i)
-    hits = total = 0
-    for g, idxs in idx_by_group.items():
-        if len(idxs) < min_group:
-            continue
-        sub  = S_np[np.ix_(idxs, idxs)]
-        top1 = sub.argmax(axis=1)
-        hits  += (top1 == np.arange(len(idxs))).sum()
-        total += len(idxs)
-    return hits / total if total else 0.0
+    return grouped_diagonal_recall_at1(S_np, groups, min_group=min_group)
 
 
 def recall_at_k(S_np, k_list=(1, 5, 10)):
     """Cumulative Recall@k for multiple k values."""
-    N = S_np.shape[0]
-    results = {}
-    for k in k_list:
-        topk  = np.argsort(-S_np, axis=1)[:, :k]
-        hits  = sum(i in topk[i] for i in range(N))
-        results[k] = hits / N
-    return results
+    metrics = diagonal_metric_summary(S_np, ks=tuple(sorted(set(k_list))))
+    return {k: metrics[f"Recall@{k}"] for k in k_list}
 
 
 # ---------------------------------------------------------------------------
@@ -258,40 +245,59 @@ def main(args):
     # 1. Load data
     # ------------------------------------------------------------------
     df = pd.read_csv(args.csv)
-    need_cols = {"smiles", "text_rich", "target_chembl_id"}
+    need_cols = {"smiles", args.text_field, "target_chembl_id"}
     missing = need_cols - set(df.columns)
     if missing:
         raise ValueError(f"CSV missing columns: {missing}. Run 01_download_data.py first.")
-    df = df.dropna(subset=["smiles", "text_rich"]).copy()
+    df = df.dropna(subset=["smiles", args.text_field]).copy()
+    df["_model_text"] = df[args.text_field].astype(str)
 
     if args.remove_drug_name:
-        df["text_rich"] = df["text_rich"].str.replace(
+        df["_model_text"] = df["_model_text"].str.replace(
             r"Drug:\s*[^.]+\. ?", "", regex=True).str.strip()
         print("WARNING: Drug names stripped from text_rich (leakage ablation)")
 
     # File suffix so both conditions coexist in the same --outdir
-    sfx = "_nodrug" if args.remove_drug_name else ""
+    sfx = args.output_suffix
+    if sfx is None:
+        sfx = "_nodrug" if args.remove_drug_name else ""
 
-    print("Sample text [0]:", df["text_rich"].iloc[0])
-    print("Sample text [1]:", df["text_rich"].iloc[1], "\n")
+    print(f"Text field: {args.text_field}")
+    print("Sample text [0]:", df["_model_text"].iloc[0])
+    print("Sample text [1]:", df["_model_text"].iloc[1], "\n")
 
     # ------------------------------------------------------------------
     # 2. Scaffold split
     # ------------------------------------------------------------------
-    print("Computing Murcko scaffolds ...")
-    df["scaffold"] = df["smiles"].apply(murcko_scaffold)
-    df = df.dropna(subset=["scaffold"]).reset_index(drop=True)
+    val_df = pd.DataFrame(columns=df.columns)
+    if args.split_manifest and os.path.exists(args.split_manifest):
+        with open(args.split_manifest, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        splits = manifest["splits"]
+        train_df = df.iloc[splits["train"]].reset_index(drop=True)
+        val_idx = splits.get("val", [])
+        if val_idx:
+            val_df = df.iloc[val_idx].reset_index(drop=True)
+        test_df = df.iloc[splits["test"]].reset_index(drop=True)
+        print(
+            "Loaded saved scaffold manifest:",
+            f"train={len(train_df)} val={len(val_df)} test={len(test_df)}",
+        )
+    else:
+        print("Computing Murcko scaffolds ...")
+        df["scaffold"] = df["smiles"].apply(murcko_scaffold)
+        df = df.dropna(subset=["scaffold"]).reset_index(drop=True)
 
-    scaffolds = df["scaffold"].unique()
-    rng = np.random.default_rng(SEED)
-    rng.shuffle(scaffolds)
-    cut         = int(0.9 * len(scaffolds))
-    train_scafs = set(scaffolds[:cut])
-    test_scafs  = set(scaffolds[cut:])
+        scaffolds = df["scaffold"].unique()
+        rng = np.random.default_rng(SEED)
+        rng.shuffle(scaffolds)
+        cut         = int(0.9 * len(scaffolds))
+        train_scafs = set(scaffolds[:cut])
+        test_scafs  = set(scaffolds[cut:])
 
-    train_df = df[df["scaffold"].isin(train_scafs)].reset_index(drop=True)
-    test_df  = df[df["scaffold"].isin(test_scafs)].reset_index(drop=True)
-    print(f"Split → train: {len(train_df)} | test: {len(test_df)}")
+        train_df = df[df["scaffold"].isin(train_scafs)].reset_index(drop=True)
+        test_df  = df[df["scaffold"].isin(test_scafs)].reset_index(drop=True)
+        print(f"Fallback split → train: {len(train_df)} | test: {len(test_df)}")
 
     # ------------------------------------------------------------------
     # 3. Features
@@ -305,9 +311,9 @@ def main(args):
     print("Encoding text with S-Biomed-RoBERTa ...")
     text_tok   = AutoTokenizer.from_pretrained(TEXT_MODEL, use_fast=True)
     text_model = AutoModel.from_pretrained(TEXT_MODEL).to(device).eval()
-    Z_text_train = cls_encode(train_df["text_rich"].tolist(), text_tok, text_model,
+    Z_text_train = cls_encode(train_df["_model_text"].tolist(), text_tok, text_model,
                               device, max_length=MAX_TXT_LEN, bs=64)
-    Z_text_test  = cls_encode(test_df["text_rich"].tolist(),  text_tok, text_model,
+    Z_text_test  = cls_encode(test_df["_model_text"].tolist(),  text_tok, text_model,
                               device, max_length=MAX_TXT_LEN, bs=64)
 
     # ------------------------------------------------------------------
@@ -387,12 +393,16 @@ def main(args):
     torch.save(Z_text_test, os.path.join(args.outdir, f"Z_text_test{sfx}.pt"))
     np.save(os.path.join(args.outdir, f"X_mol_test{sfx}.npy"), X_mol_test)
     test_df.to_csv(os.path.join(args.outdir, f"test_df{sfx}.csv"), index=False)
+    if len(val_df) > 0:
+        val_df.to_csv(os.path.join(args.outdir, f"val_df{sfx}.csv"), index=False)
     np.save(os.path.join(args.outdir, f"epoch_losses{sfx}.npy"), np.array(epoch_losses))
 
     # ------------------------------------------------------------------
     # 9. Loss curve plot
     # ------------------------------------------------------------------
-    cond_label = "no drug name" if args.remove_drug_name else "with drug name"
+    cond_label = args.text_field
+    if args.remove_drug_name:
+        cond_label += " (no drug name)"
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(range(1, EPOCHS + 1), epoch_losses, linewidth=1.5)
     ax.set_xlabel("Epoch"); ax.set_ylabel("Training Loss")
@@ -412,6 +422,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv",    type=str, default="chembl_mechanisms_enriched.csv")
     parser.add_argument("--outdir", type=str, default="outputs")
+    parser.add_argument(
+        "--split_manifest",
+        type=str,
+        default="splits/chembl_scaffold_seed0_train80_val10_test10.json",
+        help="Saved scaffold split manifest used by the paper; if missing, fall back to an ad hoc 90/10 scaffold split.",
+    )
     parser.add_argument("--remove_drug_name", action="store_true",
                         help="Strip 'Drug: X.' from text_rich for leakage ablation.")
+    parser.add_argument(
+        "--text_field",
+        type=str,
+        default="text_rich",
+        help="CSV text column to encode; use mechanism_of_action for mechanism-only ablation.",
+    )
+    parser.add_argument(
+        "--output_suffix",
+        type=str,
+        default=None,
+        help="Optional suffix for saved output filenames; defaults to _nodrug only for --remove_drug_name.",
+    )
     main(parser.parse_args())
