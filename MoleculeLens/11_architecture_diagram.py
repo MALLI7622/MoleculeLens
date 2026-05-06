@@ -307,15 +307,21 @@ def mini_line_chart(ax, x, y, w, h):
 
 
 def mini_retrieve_list(ax, x, y, w, h):
-    rows = [0.92, 0.78, 0.88]
-    for i, width_frac in enumerate(rows):
-        yy = y + h - 0.10 - i * 0.14
-        ax.add_patch(FancyBboxPatch((x, yy - 0.035), w * width_frac, 0.07,
+    rows = [
+        (0.98, 0.22, "#9fb0c0", "#53687c", 0.000),
+        (0.74, 0.16, "#b0becb", "#65788c", 0.055),
+        (0.56, 0.20, "#c0cad4", "#738497", 0.020),
+    ]
+    for i, (width_frac, chip_frac, bar_col, chip_col, xoff) in enumerate(rows):
+        yy = y + h - 0.14 - i * 0.125
+        row_x = x + xoff
+        row_h = 0.076 - i * 0.004
+        ax.add_patch(FancyBboxPatch((row_x, yy - row_h / 2), w * width_frac, row_h,
                                     boxstyle="round,pad=0.012,rounding_size=0.025",
-                                    fc="#e7edf3", ec="none", zorder=8))
-        ax.add_patch(FancyBboxPatch((x, yy - 0.035), w * 0.18, 0.07,
+                                    fc=bar_col, ec="none", alpha=0.92, zorder=8))
+        ax.add_patch(FancyBboxPatch((row_x, yy - row_h / 2), w * chip_frac, row_h,
                                     boxstyle="round,pad=0.012,rounding_size=0.025",
-                                    fc="#cfdbe6", ec="none", zorder=9))
+                                    fc=chip_col, ec="none", zorder=9))
 
 
 def render():
