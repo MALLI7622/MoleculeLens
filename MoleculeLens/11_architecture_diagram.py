@@ -120,7 +120,7 @@ def arrow(ax, x0, y0, x1, y1, color=None, lw=1.35, rad=0.0, style="-|>",
 
 
 def stage_label(ax, x, y, text):
-    ax.text(x, y, text, ha="center", va="bottom", fontsize=9.2,
+    ax.text(x, y, text, ha="center", va="bottom", fontsize=12.2,
             fontweight="bold", color=COL["ink"], zorder=10)
 
 
