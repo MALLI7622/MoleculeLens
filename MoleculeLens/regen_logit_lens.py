@@ -23,10 +23,10 @@ def mirror_to_root(stem):
         )
 
 plt.rcParams.update({
-    "font.family": "DejaVu Sans", "font.size": 15.5,
-    "axes.labelsize": 17.0, "axes.titlesize": 17.0,
-    "xtick.labelsize": 15.0, "ytick.labelsize": 15.0,
-    "legend.fontsize": 15.0,
+    "font.family": "DejaVu Sans", "font.size": 9,
+    "axes.labelsize": 9, "axes.titlesize": 10,
+    "xtick.labelsize": 8, "ytick.labelsize": 8,
+    "legend.fontsize": 8,
     "axes.linewidth": 0.8,
     "axes.spines.top": False, "axes.spines.right": False,
 })
@@ -50,8 +50,11 @@ gap        = rich_r1 - nodrug_r1
 first_sig = next((l for l in range(1, N_LAYERS) if gap[l] > 0.03), 12)
 emergence_layer = int(np.argmax(rich_r1))
 
-fig4 = plt.figure(figsize=(10.6, 3.8), constrained_layout=True)
-gs4  = gridspec.GridSpec(1, 3, figure=fig4, wspace=0.42)
+fig4 = plt.figure(figsize=(8.4, 2.55))
+gs4  = gridspec.GridSpec(
+    1, 3, figure=fig4, wspace=0.46,
+    left=0.08, right=0.985, bottom=0.24, top=0.82
+)
 
 # Panel A: R@1 curve
 ax = fig4.add_subplot(gs4[0])
@@ -68,12 +71,12 @@ ax.legend(frameon=False)
 ax = fig4.add_subplot(gs4[1])
 colours = ["#e45756" if g > 0.03 else "#aec7e8" for g in gap]
 ax.bar(layers, gap, color=colours, edgecolor="none", width=0.7)
-ax.axhline(0.03, color="#555555", lw=1, ls="--", label="threshold = 0.03")
+ax.axhline(0.03, color="#555555", lw=1, ls="--", label="gap > 0.03")
 ax.set_xticks(shown_layers); ax.set_xticklabels(shown_layer_labels, rotation=0)
 ax.set_xlim(-0.4, 12.4)
 ax.set_xlabel("RoBERTa layer")
-ax.set_ylabel(r"R@1 gap (rich $-$ nodrug)")
-ax.set_title("(B) Gap", fontweight="bold")
+ax.set_ylabel("R@1 gap")
+ax.set_title("(B) Rich-no-drug gap", fontweight="bold")
 ax.legend(frameon=False)
 
 # Panel C: MRR curve
@@ -88,9 +91,9 @@ ax.set_title("(C) MRR", fontweight="bold")
 ax.legend(frameon=False)
 
 fig4.savefig(os.path.join(PAPER_FIG_DIR, "fig_logit_lens.pdf"),
-             bbox_inches="tight", pad_inches=0.02, format="pdf")
+             bbox_inches="tight", pad_inches=0.005, format="pdf")
 fig4.savefig(os.path.join(PAPER_FIG_DIR, "fig_logit_lens.png"),
-             bbox_inches="tight", pad_inches=0.02, dpi=300)
+             bbox_inches="tight", pad_inches=0.005, dpi=300)
 plt.close(fig4)
 
 mirror_to_root("fig_logit_lens")

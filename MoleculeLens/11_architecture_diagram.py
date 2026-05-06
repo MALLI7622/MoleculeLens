@@ -1,4 +1,594 @@
+"""Generate a polished MoleculeLens strategy/architecture figure for the paper.
+
+The current paper figure is built from this script.  The renderer below uses a
+compact narrative layout inspired by clean architecture diagrams: paired inputs,
+frozen encoders, small trainable bridges, shared retrieval space, and explanation
+outputs.
 """
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Arc, Circle, FancyArrowPatch, FancyBboxPatch, Polygon
+import matplotlib.patheffects as pe
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+PAPER_FIG_DIR = SCRIPT_DIR / "MoleculeLens-paper" / "figures"
+ROOT_FIG_DIR = REPO_ROOT / "figures"
+PAPER_FIG_DIR.mkdir(parents=True, exist_ok=True)
+ROOT_FIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+COL = {
+    "ink": "#16212f",
+    "muted": "#5d6877",
+    "line": "#435166",
+    "soft_line": "#cbd5e1",
+    "paper": "#ffffff",
+    "panel": "#f7fafc",
+    "mol": "#47b56b",
+    "mol_dark": "#16843a",
+    "text": "#5aa9e6",
+    "text_dark": "#1f76b5",
+    "frozen": "#e8f3fb",
+    "bridge": "#fff1bf",
+    "bridge_edge": "#d7a309",
+    "shared": "#f0e8ff",
+    "shared_edge": "#8a63d2",
+    "loss": "#ffe2d6",
+    "loss_edge": "#dd6b45",
+    "sal": "#ffefcf",
+    "lens": "#e9f8eb",
+    "red": "#e96262",
+    "green": "#65bb68",
+    "yellow": "#f2c94c",
+}
+
+
+def shadow_patch(patch):
+    patch.set_path_effects([
+        pe.SimplePatchShadow(offset=(1.4, -1.4), shadow_rgbFace=(0, 0, 0), alpha=0.12),
+        pe.Normal(),
+    ])
+    return patch
+
+
+def rbox(ax, x, y, w, h, label="", sub="", fc="#fff", ec=None, lw=1.15,
+         radius=0.13, fs=8.2, bold=False, color=None, z=3):
+    ec = ec or COL["soft_line"]
+    color = color or COL["ink"]
+    patch = FancyBboxPatch(
+        (x, y), w, h,
+        boxstyle=f"round,pad=0.035,rounding_size={radius}",
+        facecolor=fc,
+        edgecolor=ec,
+        linewidth=lw,
+        zorder=z,
+    )
+    ax.add_patch(shadow_patch(patch))
+    if label:
+        ax.text(
+            x + w / 2,
+            y + h * (0.58 if sub else 0.50),
+            label,
+            ha="center",
+            va="center",
+            fontsize=fs,
+            fontweight="bold" if bold else "normal",
+            color=color,
+            zorder=z + 2,
+            linespacing=1.05,
+        )
+    if sub:
+        ax.text(
+            x + w / 2,
+            y + h * 0.30,
+            sub,
+            ha="center",
+            va="center",
+            fontsize=fs - 1.6,
+            color=COL["muted"],
+            zorder=z + 2,
+            linespacing=1.05,
+        )
+    return patch
+
+
+def arrow(ax, x0, y0, x1, y1, color=None, lw=1.35, rad=0.0, style="-|>",
+          ls="-", z=6, ms=10):
+    color = color or COL["line"]
+    arr = FancyArrowPatch(
+        (x0, y0), (x1, y1),
+        arrowstyle=style,
+        mutation_scale=ms,
+        linewidth=lw,
+        linestyle=ls,
+        color=color,
+        connectionstyle=f"arc3,rad={rad}",
+        zorder=z,
+    )
+    ax.add_patch(arr)
+    return arr
+
+
+def stage_label(ax, x, y, text):
+    ax.text(x, y, text, ha="center", va="bottom", fontsize=9.2,
+            fontweight="bold", color=COL["ink"], zorder=10)
+
+
+def badge(ax, x, y, text, fc, ec, tc=None, fs=6.6):
+    ax.text(
+        x, y, text,
+        ha="center", va="center",
+        fontsize=fs,
+        fontweight="bold",
+        color=tc or ec,
+        zorder=11,
+        bbox=dict(boxstyle="round,pad=0.18,rounding_size=0.08", fc=fc, ec=ec, lw=0.9),
+    )
+
+
+def lock_icon(ax, x, y, scale=1.0, color=None):
+    color = color or COL["text_dark"]
+    body_w, body_h = 0.11 * scale, 0.085 * scale
+    body = FancyBboxPatch(
+        (x - body_w / 2, y - body_h / 2 - 0.015 * scale),
+        body_w,
+        body_h,
+        boxstyle=f"round,pad=0.004,rounding_size={0.018 * scale}",
+        facecolor="#ffffff",
+        edgecolor=color,
+        linewidth=0.8,
+        zorder=12,
+    )
+    ax.add_patch(body)
+    ax.add_patch(Arc((x, y + 0.012 * scale), 0.10 * scale, 0.11 * scale,
+                     theta1=0, theta2=180, color=color, lw=0.8, zorder=12))
+
+
+def document_card(ax, x, y, w, h, title, lines, accent):
+    rbox(ax, x, y, w, h, fc="#ffffff", ec=accent, lw=1.25, radius=0.12)
+    ax.text(x + 0.16, y + h - 0.18, title, ha="left", va="top",
+            fontsize=8.8, fontweight="bold", color=accent, zorder=8)
+    ty = y + h - 0.45
+    for line in lines:
+        ax.text(x + 0.16, ty, line, ha="left", va="top", fontsize=7.8,
+                color=COL["ink"], zorder=8)
+        ty -= 0.25
+
+
+def token_stack(ax, x, y, colors, w=0.32, h=0.34, dx=0.24, dy=0.08):
+    for layer in range(3):
+        off = layer * dy
+        alpha = 0.34 + 0.18 * layer
+        for i, c in enumerate(colors):
+            patch = FancyBboxPatch(
+                (x + i * dx + off, y + off), w, h,
+                boxstyle="round,pad=0.02,rounding_size=0.08",
+                facecolor=c,
+                edgecolor=c,
+                linewidth=0.8,
+                alpha=alpha,
+                zorder=3 + layer,
+            )
+            ax.add_patch(patch)
+
+
+ARCH_MOL_SMILES = "NC(=O)N1c2ccccc2C=Cc2ccccc21"
+
+
+def trim_molecule_image(img, pad=6):
+    try:
+        from PIL import Image, ImageChops
+    except Exception:
+        return img
+    rgba = img.convert("RGBA")
+    white = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    bbox = ImageChops.difference(rgba, white).getbbox()
+    if bbox is None:
+        return rgba
+    left, upper, right, lower = bbox
+    left = max(left - pad, 0)
+    upper = max(upper - pad, 0)
+    right = min(right + pad, rgba.width)
+    lower = min(lower + pad, rgba.height)
+    cropped = rgba.crop((left, upper, right, lower))
+    transparent = []
+    for r, g, b, a in cropped.getdata():
+        if r > 245 and g > 245 and b > 245:
+            transparent.append((255, 255, 255, 0))
+        else:
+            transparent.append((18, 24, 32, 255))
+    cropped.putdata(transparent)
+    return cropped
+
+
+def rdkit_molecule_image(smiles=ARCH_MOL_SMILES, size=(520, 240)):
+    try:
+        import io
+        from PIL import Image
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        from rdkit.Chem.Draw import rdMolDraw2D
+    except Exception:
+        return None
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    AllChem.Compute2DCoords(mol)
+    rdMolDraw2D.PrepareMolForDrawing(mol)
+    drawer = rdMolDraw2D.MolDraw2DCairo(size[0], size[1])
+    opts = drawer.drawOptions()
+    opts.padding = 0.08
+    opts.bondLineWidth = 2
+    opts.addAtomIndices = False
+    if hasattr(opts, "useBWAtomPalette"):
+        opts.useBWAtomPalette()
+    drawer.DrawMolecule(mol)
+    drawer.FinishDrawing()
+    return trim_molecule_image(Image.open(io.BytesIO(drawer.GetDrawingText())))
+
+
+def molecule_icon(ax, cx, cy, scale=1.0):
+    pts = [
+        (-0.55, 0.02), (-0.28, 0.18), (0.00, 0.05),
+        (0.27, 0.22), (0.54, 0.05), (0.23, -0.18), (-0.08, -0.15),
+    ]
+    pts = [(cx + px * scale, cy + py * scale) for px, py in pts]
+    for a, b in zip(pts[:-1], pts[1:]):
+        ax.plot([a[0], b[0]], [a[1], b[1]], color="#475569", lw=1.4,
+                solid_capstyle="round", zorder=9)
+    for i, (px, py) in enumerate(pts):
+        col = [COL["green"], "#11a579", "#111827", COL["yellow"], COL["green"], "#f97316", "#2563eb"][i]
+        ax.add_patch(Circle((px, py), 0.055 * scale, fc=col, ec="white", lw=0.5, zorder=10))
+
+
+def draw_structure(ax, x0, y0, x1, y1, z=9):
+    img = rdkit_molecule_image()
+    if img is not None:
+        ax.imshow(img, extent=(x0, x1, y0, y1), zorder=z, aspect="auto")
+    else:
+        molecule_icon(ax, (x0 + x1) / 2, (y0 + y1) / 2, min(x1 - x0, y1 - y0) * 1.4)
+
+
+def drug_structure_card(ax, x, y, w, h):
+    rbox(ax, x, y, w, h, fc="#ffffff", ec=COL["mol_dark"], lw=1.25, radius=0.12)
+    ax.text(x + 0.16, y + h - 0.18, "Drug structure", ha="left", va="top",
+            fontsize=8.8, fontweight="bold", color=COL["mol_dark"], zorder=8)
+    ax.text(x + 0.16, y + h - 0.42, "SMILES -> ECFP4", ha="left", va="top",
+            fontsize=7.8, color=COL["ink"], zorder=8)
+    draw_structure(ax, x + 0.30, y + 0.04, x + w - 0.13, y + 0.57)
+
+
+def mini_bar_chart(ax, x, y, w, h):
+    vals = [0.92, 0.72, 0.55, -0.30, 0.42]
+    labels = ["508", "193", "759", "1204", "1178"]
+    zero = x + w * 0.36
+    ax.plot([zero, zero], [y + 0.02, y + h - 0.02],
+            color="#334155", lw=0.9, zorder=8)
+    for i, val in enumerate(vals):
+        yy = y + h - 0.08 - i * (h - 0.12) / len(vals)
+        bar_h = 0.052
+        if val >= 0:
+            ax.add_patch(FancyBboxPatch((zero, yy - bar_h / 2), val * w * 0.52, bar_h,
+                                         boxstyle="round,pad=0.006,rounding_size=0.015",
+                                         fc=COL["green"], ec="none", zorder=8))
+        else:
+            ax.add_patch(FancyBboxPatch((zero + val * w * 0.52, yy - bar_h / 2),
+                                         -val * w * 0.52, bar_h,
+                                         boxstyle="round,pad=0.006,rounding_size=0.015",
+                                         fc=COL["red"], ec="none", zorder=8))
+        ax.text(x, yy, f"bit {labels[i]}", ha="left", va="center",
+                fontsize=6.4, color=COL["muted"], zorder=9)
+
+
+def mini_line_chart(ax, x, y, w, h):
+    for frac in [0.33, 0.66]:
+        ax.plot([x, x + w], [y + frac * h, y + frac * h],
+                color="#d7e1ea", lw=0.55, zorder=7)
+    ax.plot([x, x], [y, y + h], color="#7d8a99", lw=0.95, zorder=8)
+    ax.plot([x, x + w], [y, y], color="#7d8a99", lw=0.95, zorder=8)
+    xs = [x + 0.10 * w, x + 0.30 * w, x + 0.50 * w, x + 0.70 * w, x + 0.92 * w]
+    rich = [y + 0.08 * h, y + 0.09 * h, y + 0.11 * h, y + 0.22 * h, y + 0.92 * h]
+    nodrug = [y + 0.06 * h, y + 0.07 * h, y + 0.09 * h, y + 0.17 * h, y + 0.55 * h]
+    ax.plot(xs, rich, color="#2f73c9", lw=1.55, marker="o", ms=2.8, zorder=9)
+    ax.plot(xs, nodrug, color="#e15d4f", lw=1.25, ls="--", marker="s", ms=2.5, zorder=9)
+    ax.text(x + w * 0.60, y + h * 0.84, "layer 12", fontsize=6.2,
+            color=COL["muted"], zorder=9)
+
+
+def mini_retrieve_list(ax, x, y, w, h):
+    rows = [0.92, 0.78, 0.88]
+    for i, width_frac in enumerate(rows):
+        yy = y + h - 0.10 - i * 0.14
+        ax.add_patch(FancyBboxPatch((x, yy - 0.035), w * width_frac, 0.07,
+                                    boxstyle="round,pad=0.012,rounding_size=0.025",
+                                    fc="#e7edf3", ec="none", zorder=8))
+        ax.add_patch(FancyBboxPatch((x, yy - 0.035), w * 0.18, 0.07,
+                                    boxstyle="round,pad=0.012,rounding_size=0.025",
+                                    fc="#cfdbe6", ec="none", zorder=9))
+
+
+def render():
+    fig, ax = plt.subplots(figsize=(14.8, 5.00))
+    ax.set_xlim(0, 14.8)
+    ax.set_ylim(0, 5.35)
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    # Subtle background bands make the flow readable after NeurIPS downscaling.
+    for x, w, fc in [
+        (0.22, 2.35, "#fbfdff"),
+        (2.80, 2.55, "#f8fbfe"),
+        (5.70, 2.20, "#fffdfa"),
+        (8.15, 3.05, "#fbf8ff"),
+        (11.55, 2.70, "#fcfdfb"),
+    ]:
+        ax.add_patch(FancyBboxPatch((x, 0.58), w, 4.42,
+                                    boxstyle="round,pad=0.03,rounding_size=0.18",
+                                    fc=fc, ec="#eef2f7", lw=0.7, zorder=0))
+
+    stage_label(ax, 1.38, 4.92, "Paired Dataset")
+    stage_label(ax, 4.12, 4.92, "Frozen Encoders")
+    stage_label(ax, 6.76, 4.92, "Trainable Bridges")
+    stage_label(ax, 9.92, 4.92, "Shared Retrieval Space")
+    stage_label(ax, 12.92, 4.92, "Audit Outputs")
+
+    # Inputs.
+    drug_structure_card(ax, 0.55, 3.18, 1.88, 1.15)
+    document_card(ax, 0.55, 1.48, 1.88, 1.10, "Mechanism text",
+                  ["sodium channel", "beta-2 agonist", "DNA polymerase"], COL["text_dark"])
+    ax.plot([1.49, 1.49], [2.67, 3.14], color=COL["soft_line"], lw=1.3, zorder=2)
+    ax.text(1.49, 2.91, "matched pair", ha="center", va="center",
+            fontsize=6.6, color=COL["muted"], zorder=7,
+            bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec="#e2e8f0", lw=0.7))
+
+    # Frozen encoders.
+    rbox(ax, 3.28, 3.43, 1.76, 0.85, "ECFP4 / RDKit", "2048-bit fingerprint",
+         fc=COL["frozen"], ec=COL["text"], fs=8.7, bold=True)
+    badge(ax, 4.72, 4.18, "frozen", "#ffffff", COL["text_dark"], fs=6.2)
+    lock_icon(ax, 4.38, 4.18, scale=0.70, color=COL["text_dark"])
+    rbox(ax, 3.28, 1.60, 1.76, 0.95, "S-Biomed-RoBERTa", "CLS from each layer",
+         fc=COL["frozen"], ec=COL["text"], fs=8.5, bold=True)
+    badge(ax, 4.72, 2.43, "frozen", "#ffffff", COL["text_dark"], fs=6.2)
+    lock_icon(ax, 4.38, 2.43, scale=0.70, color=COL["text_dark"])
+
+    # Embedding/token stacks.
+    token_stack(ax, 5.48, 3.55, [COL["green"], COL["green"], "#f5c15d", COL["green"], COL["green"]])
+    token_stack(ax, 5.48, 1.78, [COL["text"], COL["text"], COL["text"], "#f6a6a6", COL["text"]])
+    ax.text(6.08, 4.28, "molecule bits", ha="center", va="center", fontsize=6.7, color=COL["muted"])
+    ax.text(6.08, 4.12, "feature map", ha="center", va="center",
+            fontsize=5.6, color=COL["muted"], style="italic")
+    ax.text(6.09, 2.51, "text states", ha="center", va="center", fontsize=6.7, color=COL["muted"])
+    ax.text(6.09, 2.35, "feature map", ha="center", va="center",
+            fontsize=5.6, color=COL["muted"], style="italic")
+
+    # Trainable bridges.
+    trainable_group = FancyBboxPatch(
+        (6.72, 1.43), 1.08, 2.90,
+        boxstyle="round,pad=0.045,rounding_size=0.12",
+        fc="#fff8d8", ec=COL["bridge_edge"], lw=0.9,
+        linestyle="--", alpha=0.55, zorder=2,
+    )
+    ax.add_patch(trainable_group)
+    ax.text(7.26, 4.45, "trainable\nprojection heads",
+            ha="center", va="center", fontsize=6.4,
+            color="#9a6700", fontweight="bold", linespacing=0.9, zorder=8)
+    rbox(ax, 6.88, 3.42, 0.86, 0.82, r"$W_m$", "2048 -> 256",
+         fc=COL["bridge"], ec=COL["bridge_edge"], fs=9.5, bold=True)
+    rbox(ax, 6.88, 1.62, 0.86, 0.82, r"$W_t$", "768 -> 256",
+         fc=COL["bridge"], ec=COL["bridge_edge"], fs=9.5, bold=True)
+
+    # Unit vectors and shared space.
+    rbox(ax, 7.98, 3.46, 0.86, 0.58, r"$\hat b^{(m)}$", "unit",
+         fc="#e9fbef", ec=COL["mol"], fs=7.8, bold=True)
+    rbox(ax, 7.98, 1.66, 0.86, 0.58, r"$\hat b^{(t)}$", "unit",
+         fc="#eaf5ff", ec=COL["text"], fs=7.8, bold=True)
+
+    # Keep normalized vectors outside the retrieval space, then enter the
+    # geometric space as a separate zone.
+    shared_x, shared_y, shared_w, shared_h = 9.12, 1.50, 1.86, 2.58
+    shared_cx = shared_x + shared_w / 2
+    shared_right = shared_x + shared_w
+    shared = FancyBboxPatch((shared_x, shared_y), shared_w, shared_h,
+                            boxstyle="round,pad=0.045,rounding_size=0.18",
+                            fc="#f8f4ff", ec=COL["shared_edge"], lw=1.2, zorder=3)
+    ax.add_patch(shadow_patch(shared))
+    ax.text(shared_cx, 3.78, "256-d joint space", ha="center", va="center",
+            fontsize=8.4, fontweight="bold", color=COL["ink"], zorder=9)
+    ax.text(shared_cx, 3.50, "cosine / dot-product retrieval", ha="center", va="center",
+            fontsize=6.1, color=COL["muted"], zorder=9)
+    legend_y = 3.31
+    for x0, color, label in [
+        (shared_x + 0.26, COL["mol"], "molecule"),
+        (shared_x + 0.88, COL["text"], "text"),
+        (shared_x + 1.30, COL["yellow"], "anchor"),
+    ]:
+        ax.add_patch(Circle((x0, legend_y), 0.045, fc=color, ec="white", lw=0.8, zorder=9))
+        ax.text(x0 + 0.08, legend_y, label, ha="left", va="center",
+                fontsize=5.7, color=COL["muted"], zorder=9)
+
+    inner = FancyBboxPatch((shared_x + 0.18, 1.78), shared_w - 0.36, 1.42,
+                           boxstyle="round,pad=0.02,rounding_size=0.10",
+                           fc="#ffffff", ec="#e3d7f4", lw=0.55, alpha=0.62, zorder=4)
+    ax.add_patch(inner)
+    for y_grid in [2.15, 2.55, 2.95]:
+        ax.plot([shared_x + 0.27, shared_right - 0.27], [y_grid, y_grid],
+                color="#d9ccef", lw=0.55, alpha=0.50, zorder=5)
+    for x_grid in [shared_cx - 0.56, shared_cx, shared_cx + 0.56]:
+        ax.plot([x_grid, x_grid], [1.88, 3.10],
+                color="#d9ccef", lw=0.55, alpha=0.50, zorder=5)
+    ax.plot([shared_x + 0.32, shared_right - 0.30], [2.08, 2.08],
+            color="#c8b6e6", lw=0.75, alpha=0.70, zorder=5)
+    ax.plot([shared_x + 0.32, shared_x + 0.32], [1.92, 3.07],
+            color="#c8b6e6", lw=0.75, alpha=0.70, zorder=5)
+    dots = [
+        (shared_cx - 0.58, 2.36, COL["mol"], 0.115),
+        (shared_cx - 0.12, 2.52, COL["mol"], 0.115),
+        (shared_cx + 0.50, 2.34, COL["mol"], 0.115),
+        (shared_cx - 0.48, 2.96, COL["text"], 0.115),
+        (shared_cx + 0.02, 3.12, COL["text"], 0.115),
+        (shared_cx + 0.58, 2.88, COL["text"], 0.115),
+        (shared_cx - 0.02, 2.72, COL["yellow"], 0.135),
+    ]
+    for x0, y0, x1, y1 in [
+        (shared_cx - 0.58, 2.36, shared_cx - 0.48, 2.96),
+        (shared_cx - 0.12, 2.52, shared_cx + 0.02, 3.12),
+        (shared_cx + 0.50, 2.34, shared_cx + 0.58, 2.88),
+    ]:
+        ax.plot([x0, x1], [y0, y1], color="#7d5cc8", lw=1.05,
+                alpha=0.42, linestyle="--", zorder=6)
+    for dx, dy, c, rad in dots:
+        ax.add_patch(Circle((dx, dy), rad, fc=c, ec="white", lw=1.2, zorder=9))
+    ax.text(shared_cx, 1.93, r"$s_{ij}=\hat b_i^{(m)}\cdot\hat b_j^{(t)}$",
+            ha="center", va="center", fontsize=8.7, color=COL["ink"], zorder=10,
+            bbox=dict(boxstyle="round,pad=0.20,rounding_size=0.07",
+                      fc="#fffefe", ec="#cdbbed", lw=0.75, alpha=0.98))
+
+    # Loss.
+    loss_box = rbox(ax, shared_x - 0.08, 4.23, shared_w + 0.16, 0.52,
+                    "CLOOB / InfoLOOB objective",
+                    "align matched pairs; repel impostors",
+                    fc="#fff5ec", ec=COL["loss_edge"], lw=1.55, fs=7.6, bold=True)
+    loss_box.set_linestyle("--")
+    arrow(ax, shared_cx, 4.23, shared_cx, 4.08,
+          color=COL["loss_edge"], lw=1.15, ls="--", ms=7, z=8)
+    ax.text(shared_cx + 0.28, 4.13, "supervises alignment", ha="left", va="center",
+            fontsize=5.4, color=COL["loss_edge"], fontweight="bold", zorder=10)
+    arrow(ax, shared_x - 0.04, 4.48, 7.68, 4.48, color=COL["loss_edge"],
+          lw=1.0, ls="--", rad=0.0, ms=8)
+
+    # Audit outputs: one clean, vertically aligned stack.
+    out_x, out_w = 12.12, 1.60
+    explain_y, retrieve_y, probe_y = 3.55, 2.48, 1.40
+    explain_h = retrieve_h = probe_h = 0.86
+
+    rbox(ax, out_x, explain_y, out_w, explain_h,
+         fc="#ffffff", ec="#e0a923", fs=7.4, bold=True)
+    ax.add_patch(FancyBboxPatch((out_x + 0.08, explain_y + 0.15), 0.055, explain_h - 0.30,
+                                boxstyle="round,pad=0.004,rounding_size=0.025",
+                                fc="#e0a923", ec="none", zorder=8))
+    ax.text(out_x + out_w - 0.14, explain_y + explain_h - 0.10, "explain",
+            ha="right", va="center", fontsize=6.7, color="#9a6700",
+            fontweight="bold", zorder=9)
+    ax.text(out_x + out_w / 2, explain_y + explain_h - 0.28, "ECFP4 saliency",
+            ha="center", va="center", fontsize=7.8, fontweight="bold",
+            color=COL["ink"], zorder=9)
+    mini_bar_chart(ax, out_x + 0.24, explain_y + 0.17, 1.16, 0.41)
+    ax.text(out_x + out_w / 2, explain_y + 0.08, "bit scores",
+            ha="center", va="center", fontsize=6.4, color=COL["muted"], zorder=9)
+
+    rbox(ax, out_x, retrieve_y, out_w, retrieve_h,
+         fc="#ffffff", ec=COL["mol"], fs=7.2, bold=True)
+    ax.add_patch(FancyBboxPatch((out_x + 0.08, retrieve_y + 0.15), 0.055, retrieve_h - 0.30,
+                                boxstyle="round,pad=0.004,rounding_size=0.025",
+                                fc=COL["mol"], ec="none", zorder=8))
+    ax.text(out_x + out_w - 0.14, retrieve_y + retrieve_h - 0.10, "retrieve",
+            ha="right", va="center", fontsize=6.7, color=COL["mol_dark"],
+            fontweight="bold", zorder=9)
+    ax.text(out_x + out_w / 2, retrieve_y + retrieve_h - 0.27, "Ranked retrieval",
+            ha="center", va="center", fontsize=7.8, fontweight="bold",
+            color=COL["ink"], zorder=9)
+    mini_retrieve_list(ax, out_x + 0.28, retrieve_y + 0.26, 1.05, 0.37)
+    ax.text(out_x + out_w / 2, retrieve_y + 0.13, "top mechanisms",
+            ha="center", va="center", fontsize=6.4, color=COL["muted"], zorder=9)
+
+    rbox(ax, out_x, probe_y, out_w, probe_h,
+         fc="#ffffff", ec=COL["text"], fs=7.2, bold=True)
+    ax.add_patch(FancyBboxPatch((out_x + 0.08, probe_y + 0.15), 0.055, probe_h - 0.30,
+                                boxstyle="round,pad=0.004,rounding_size=0.025",
+                                fc=COL["text"], ec="none", zorder=8))
+    ax.text(out_x + out_w - 0.14, probe_y + probe_h - 0.10, "probe",
+            ha="right", va="center", fontsize=6.7, color=COL["text_dark"],
+            fontweight="bold", zorder=9)
+    ax.text(out_x + out_w / 2, probe_y + probe_h - 0.27, "RoBERTa logit lens",
+            ha="center", va="center", fontsize=7.8, fontweight="bold",
+            color=COL["ink"], zorder=9)
+    mini_line_chart(ax, out_x + 0.30, probe_y + 0.19, 1.00, 0.34)
+    ax.text(out_x + out_w / 2, probe_y + 0.10, "layer-wise retrieval",
+            ha="center", va="center", fontsize=6.4, color=COL["muted"], zorder=9)
+
+    # Main arrows.
+    arrow(ax, 2.48, 3.82, 3.20, 3.82)
+    arrow(ax, 2.48, 2.05, 3.20, 2.05)
+    arrow(ax, 5.10, 3.82, 5.48, 3.82)
+    arrow(ax, 5.10, 2.05, 5.48, 2.05)
+    arrow(ax, 6.62, 3.82, 6.83, 3.82)
+    arrow(ax, 6.62, 2.05, 6.83, 2.05)
+    arrow(ax, 7.74, 3.82, 7.94, 3.75)
+    arrow(ax, 7.74, 2.05, 7.94, 1.94)
+    arrow(ax, 8.86, 3.73, shared_x - 0.02, 3.24, rad=-0.10, lw=1.55)
+    arrow(ax, 8.86, 1.94, shared_x - 0.02, 2.33, rad=0.10, lw=1.55)
+    arrow(ax, shared_right + 0.03, 3.12, out_x - 0.06, explain_y + explain_h / 2,
+          rad=0.12, lw=1.75, ms=11)
+    arrow(ax, shared_right + 0.03, 2.78, out_x - 0.06, retrieve_y + retrieve_h / 2,
+          rad=0.00, lw=1.75, ms=11)
+    arrow(ax, shared_right + 0.03, 2.34, out_x - 0.06, probe_y + probe_h / 2,
+          rad=-0.12, lw=1.75, ms=11)
+
+    # Explicit legend for the visual encoding.
+    legend_box = FancyBboxPatch(
+        (0.62, 0.34), 13.10, 0.34,
+        boxstyle="round,pad=0.035,rounding_size=0.10",
+        fc="#ffffff", ec="#dbe4ee", lw=0.7, zorder=2,
+    )
+    ax.add_patch(legend_box)
+    ax.text(0.82, 0.51, "Legend", ha="left", va="center",
+            fontsize=6.3, fontweight="bold", color=COL["ink"], zorder=8)
+    legend = [
+        (COL["mol"], "molecule branch"),
+        (COL["text"], "text branch"),
+        (COL["frozen"], "frozen encoder"),
+        (COL["bridge"], "trainable bridge"),
+        (COL["shared"], "shared space"),
+        (COL["loss"], "loss objective"),
+    ]
+    legend_left = 1.55
+    legend_step = 2.02
+    for idx, (col, label) in enumerate(legend):
+        x = legend_left + idx * legend_step
+        swatch = FancyBboxPatch(
+            (x, 0.44), 0.14, 0.14,
+            boxstyle="round,pad=0.02,rounding_size=0.04",
+            fc="#fff5ec" if label == "loss objective" else col,
+            ec=COL["loss_edge"] if label == "loss objective" else "#94a3b8",
+            lw=0.8 if label == "loss objective" else 0.4,
+            zorder=8,
+        )
+        if label == "loss objective":
+            swatch.set_linestyle("--")
+        ax.add_patch(swatch)
+        ax.text(x + 0.22, 0.51, label, ha="left", va="center",
+                fontsize=6.0, color=COL["muted"], zorder=8)
+
+    fig.tight_layout(pad=0.02)
+    paper_pdf = PAPER_FIG_DIR / "fig_architecture.pdf"
+    paper_png = PAPER_FIG_DIR / "fig_architecture.png"
+    root_pdf = ROOT_FIG_DIR / "fig_architecture.pdf"
+    root_png = ROOT_FIG_DIR / "fig_architecture.png"
+    fig.savefig(paper_pdf, bbox_inches="tight", pad_inches=0.015, format="pdf")
+    fig.savefig(paper_png, bbox_inches="tight", pad_inches=0.015, dpi=240)
+    shutil.copy2(paper_pdf, root_pdf)
+    shutil.copy2(paper_png, root_png)
+    plt.close(fig)
+    print(f"Saved: {paper_pdf}")
+    print(f"Saved: {root_pdf}")
+
+
+if __name__ == "__main__":
+    render()
+    raise SystemExit
+
+r'''
 MoleculeLens architecture diagram — compact horizontal layout for NeurIPS.
 Two-row left-to-right flow (molecule top, text bottom) converging at shared
 embedding space on the right.
@@ -350,3 +940,4 @@ shutil.copy("MoleculeLens-paper/figures/fig_architecture.png",
             "/home/cheriearjun/figures/fig_architecture.png")
 plt.close(fig)
 print("Saved: fig_architecture.pdf + fig_architecture.png")
+'''
