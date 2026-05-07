@@ -160,9 +160,9 @@ print("  Saved: fig_logit_lens.pdf")
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# FIGURE 5 — Logit Lens Detail: family heatmap + attention bars
+# FIGURE 7 — Logit Lens Detail: family heatmap + attention bars
 # ══════════════════════════════════════════════════════════════════════════
-print("Generating Figure 5 (logit lens detail)...")
+print("Generating Figure 7 (logit lens detail)...")
 
 # ── get attention at layer 12 for 4 case pairs ────────────────────────────
 MODEL_NAME = "pritamdeka/S-Biomed-Roberta-snli-multinli-stsb"
@@ -208,10 +208,17 @@ def clean_tok(t):
     t = t.replace("Ġ", " ").replace("Ċ", "\n").strip()
     return t if t else "_"
 
-# ── build Figure 5 ────────────────────────────────────────────────────────
+# ── build Figure 7 ────────────────────────────────────────────────────────
 fig5 = plt.figure(figsize=(14, 9))
+fig5.suptitle(
+    "Figure 7 Logit lens detail: per-family emergence heatmap and\n"
+    "layer-12 CLS attention to mechanism vs. drug-name tokens",
+    fontsize=11,
+    fontweight="bold",
+    y=0.99,
+)
 outer = gridspec.GridSpec(2, 1, figure=fig5, hspace=0.55,
-                          height_ratios=[1.1, 1.9])
+                          height_ratios=[1.1, 1.9], top=0.88)
 
 # ── Row 1: per-family heatmap ─────────────────────────────────────────────
 ax_heat = fig5.add_subplot(outer[0])
