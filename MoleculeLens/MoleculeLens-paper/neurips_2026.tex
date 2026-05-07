@@ -69,8 +69,8 @@ The interpretability component is related to sparse and linear feature analysis~
 \section{MoleculeLens Framework}
 \label{sec:framework}
 
-\paragraph{Strategy.}
-Figure~\ref{fig:architecture-main} summarizes the central strategy. MoleculeLens does not attempt to interpret every hidden unit of a large multimodal model. Instead, it inserts a small linear bridge between a fixed molecular representation and a frozen biomedical text encoder. That bridge creates a shared retrieval space and, because the molecule-side map is linear, a direct route from each retrieval score back to ECFP4 substructures.
+\paragraph{Architecture.}
+Figure~\ref{fig:architecture-main} summarizes the MoleculeLens architecture. MoleculeLens does not attempt to interpret every hidden unit of a large multimodal model. Instead, it inserts a small linear bridge between a fixed molecular representation and a frozen biomedical text encoder. That bridge creates a shared retrieval space and, because the molecule-side map is linear, a direct route from each retrieval score back to ECFP4 substructures.
 
 \begin{figure}[!htbp]
   \centering
