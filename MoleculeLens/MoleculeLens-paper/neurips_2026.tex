@@ -141,7 +141,7 @@ KV-PLM & Scaffold ($N{=}435$) & 0.055 & 0.121 & 0.172 & 0.251 \\
 \end{table}
 
 \paragraph{Text-field and leakage controls.}
-Because \texttt{text\_rich} includes target/action metadata and an explicit drug field, we report three complementary controls in Table~\ref{tab:controls}. Removing only the drug field and retraining gives R@1~=~0.110, a 51.0\% relative drop. Holding the rich model fixed and removing only \texttt{Drug: X.} at inference gives R@1~=~0.067, a stricter 70.4\% same-model causal diagnostic. Training on mechanism text alone, removing target name, action type, and explicit drug name, gives R@1~=~0.124 and MRR~=~0.226. Thus target/action fields contribute real signal, but mechanism-only retrieval remains nontrivial and close to MolPrompt scaffold R@1.
+Because \texttt{text\_rich} includes target/action metadata and an explicit drug field, we report three complementary controls in Table~\ref{tab:controls}. Here, ``leakage drop'' refers to a family of diagnostics rather than a single number: the 51.0\% retrained no-drug drop is the fairest model-comparison baseline, the 70.4\% same-model no-name drop is the fixed-weight causal diagnostic, and the 22.9\% multi-seed proxy mean in Figure~\ref{fig:robustness-main} measures scaffold-partition sensitivity rather than canonical leakage. Removing only the drug field and retraining gives R@1~=~0.110, a 51.0\% relative drop. Holding the rich model fixed and removing only \texttt{Drug: X.} at inference gives R@1~=~0.067, a stricter 70.4\% same-model causal diagnostic. Training on mechanism text alone, removing target name, action type, and explicit drug name, gives R@1~=~0.124 and MRR~=~0.226. Thus target/action fields contribute real signal, but mechanism-only retrieval remains nontrivial and close to MolPrompt scaffold R@1.
 
 \begin{table}[!htbp]
 \centering
@@ -188,7 +188,7 @@ Seed & $n_\text{test}$ & R@1 & R@5 & R@10 & MRR \\
 \end{minipage}
 \end{table}
 
-The non-overlapping Recall@1 intervals for MoleculeLens \texttt{text\_rich} and MolPrompt support the reliability of the top-rank improvement despite the 435-example test set. Table~\ref{tab:full-loss-multiseed} shows that the complete objective is not weaker than the simplified proxy: mean R@1 is $0.277\pm0.081$ and mean MRR is $0.354\pm0.083$. The higher variance is expected because each seed induces a different scaffold-held-out test set, but every full-loss seed remains above KV-PLM scaffold R@1 and four of five exceed MolPrompt scaffold R@1. The three leakage numbers answer different questions: the 51.0\% retrained drop is the fairest model-comparison number, the 70.4\% same-model drop is the causal diagnostic for the fixed rich model, and the 22.9\% multi-seed proxy mean measures partition sensitivity rather than canonical leakage.
+The non-overlapping Recall@1 intervals for MoleculeLens \texttt{text\_rich} and MolPrompt support the reliability of the top-rank improvement despite the 435-example test set. Table~\ref{tab:full-loss-multiseed} shows that the complete objective is not weaker than the simplified proxy: mean R@1 is $0.277\pm0.081$ and mean MRR is $0.354\pm0.083$. The higher variance is expected because each seed induces a different scaffold-held-out test set, but every full-loss seed remains above KV-PLM scaffold R@1 and four of five exceed MolPrompt scaffold R@1.
 
 \begin{figure}[!htbp]
 \centering
