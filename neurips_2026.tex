@@ -106,10 +106,7 @@ The same linear bottleneck supports two complementary kinds of diagnostic analys
 \label{sec:experiments}
 
 \paragraph{Dataset and setup.}
-We construct the benchmark from ChEMBL~\citep{gaulton2012chembl,zdrazil2024chembl} by filtering for approved drugs (\texttt{max\_phase=4}), valid mechanism text, and parseable canonical SMILES. The final dataset contains 2,699 drug--text pairs spanning 1,196 unique Bemis--Murcko scaffolds. The primary text field concatenates mechanism of action, target name, action type, and drug name:
-\begin{equation}
-\texttt{text\_rich}=\texttt{mechanism}+\texttt{target}+\texttt{action}+\texttt{drug}.
-\end{equation}
+We construct the benchmark from ChEMBL~\citep{gaulton2012chembl,zdrazil2024chembl} by filtering for approved drugs (\texttt{max\_phase=4}), valid mechanism text, and parseable canonical SMILES. The final dataset contains 2,699 drug--text pairs spanning 1,196 unique Bemis--Murcko scaffolds. The primary \texttt{text\_rich} field concatenates four fields in order: mechanism of action, target name, action type, and drug name.
 The main split uses seed 0 over unique scaffolds: 2,019 train examples, 245 validation examples, and 435 held-out test examples whose scaffolds are unseen during training. We report text-query retrieval against a molecule gallery using Recall@1, MRR, Recall@5, and Recall@10 for apples-to-apples comparison with baselines. All main-table rows use single-label diagonal evaluation: a prediction is counted correct only when the exact matching row is returned. This is intentionally conservative for drugs with multiple ChEMBL mechanism rows, but it is the only consistent apples-to-apples protocol for baselines where per-example ranked lists are not available.
 
 Several test drugs appear under multiple target--action rows. For attribution analyses, same-drug and wrong-but-close filtering use RDKit \texttt{FragmentParent} standardisation over SMILES to avoid treating salt or formulation variants as independent structures. In the canonical scaffold test set, 193 of 435 rows belong to 76 parent structures with multiple mechanism rows.
