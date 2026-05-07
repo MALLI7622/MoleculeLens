@@ -316,7 +316,7 @@ The benchmark covers FDA-approved ChEMBL drugs with parseable SMILES and curated
 
 \section{Conclusion}
 
-On a 2,699-pair ChEMBL benchmark with scaffold-disjoint evaluation, MoleculeLens outperforms MolPrompt and KV-PLM on Recall@1 and MRR while exposing lexical and target/action metadata dependence. Its central value is interpretability: a validated ECFP4 saliency lens explains correct matches, diagnoses failed retrievals, and characterizes same-model leakage, giving future drug--text systems a chemically grounded benchmark for feature-level analysis.
+On a 2,699-pair ChEMBL benchmark with scaffold-disjoint evaluation, MoleculeLens outperforms MolPrompt and KV-PLM on Recall@1 and MRR. MoleculeLens contributes a validated ECFP4 saliency lens that explains correct matches and diagnoses failed retrievals. Its same-model substructure-shift audit under drug-name ablation is a reusable leakage diagnostic for linear dual encoders, testing whether lexical cues change which molecular features drive a score.
 
 
 {\setlength{\bibsep}{3pt}
