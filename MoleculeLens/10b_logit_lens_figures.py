@@ -210,15 +210,8 @@ def clean_tok(t):
 
 # ── build Figure 7 ────────────────────────────────────────────────────────
 fig5 = plt.figure(figsize=(14, 9))
-fig5.suptitle(
-    "Figure 7 Logit lens detail: per-family emergence heatmap and\n"
-    "layer-12 CLS attention to mechanism vs. drug-name tokens",
-    fontsize=11,
-    fontweight="bold",
-    y=0.99,
-)
 outer = gridspec.GridSpec(2, 1, figure=fig5, hspace=0.55,
-                          height_ratios=[1.1, 1.9], top=0.88)
+                          height_ratios=[1.1, 1.9], top=0.96)
 
 # ── Row 1: per-family heatmap ─────────────────────────────────────────────
 ax_heat = fig5.add_subplot(outer[0])
