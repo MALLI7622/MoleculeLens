@@ -386,3 +386,29 @@ Radius does not matter within noise. Note that ECFP6 is not worse, which answers
 - Eq. 1 attribution for all 435 pairs: 0.27 s; exact gradients for all 435 pairs: 0.57 s
 
 The paper's original runs used an NVIDIA L4 24 GB (`g2-standard-4`).
+
+### E5: expanding beyond approved drugs ✅
+Downloaded all ChEMBL mechanism rows with no phase filter (`nmi/e05_download_expanded.py`, ChEMBL REST API; same cleaning and text recipe): **5,035 pairs** (3,816 molecules, 2,644 scaffolds, 988 targets) vs. 2,699 in the paper. Breakdown: 2,769 approved, 680 phase 3, 1,292 phase 2, 268 phase 1, 26 unknown. File: `chembl_mechanisms_allphases.csv` (on the VM).
+
+**More data, same canonical test (435 rows), 5 seeds.** The extra rows are scaffold-disjoint from the test and validation sets:
+
+| Training set | n_train | R@1 rich | R@1 no-drug | R@1 mechanism-only |
+|---|---|---|---|---|
+| (i) paper: approved train | 2,019 | 0.215 ± 0.012 | 0.131 ± 0.006 | 0.133 ± 0.009 |
+| (ii) all phases | 4,265 | 0.224 ± 0.014 | **0.160 ± 0.003** | **0.161 ± 0.009** |
+| (iii) approved-only subset of (ii) | 2,082 | 0.220 ± 0.010 | 0.128 ± 0.003 | 0.132 ± 0.006 |
+
+- **Investigational compounds give +22% name-free R@1** (0.131 → 0.160). Adding approved drugs from newer ChEMBL releases alone (iii) does not help.
+- The rich-text gain is small (+0.009) because names already saturate it.
+- **This answers R3 Q4:** restricting to approved drugs was unnecessary and cost performance.
+
+**New all-phase scaffold benchmark (5 partitions, ~441 test rows):**
+
+| Text | R@1 | MRR | R@1 on approved rows | R@1 on non-approved rows | R@1 ceiling |
+|---|---|---|---|---|---|
+| rich | 0.197 ± 0.018 | 0.263 | 0.278 | **0.107** | 0.992 |
+| no-drug | 0.173 ± 0.014 | 0.271 | 0.198 | **0.147** | 0.611 |
+| mechanism-only | 0.181 ± 0.006 | 0.278 | 0.213 | 0.146 | 0.609 |
+
+- **For investigational compounds, names *hurt*:** rich 0.107 < name-free 0.147, because their names are mostly development codes that carry no INN-stem signal.
+- **The name shortcut only works for drugs with informative INN names.** That's a useful robustness argument for name-free evaluation.
