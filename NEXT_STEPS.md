@@ -329,7 +329,8 @@ All 435 pairs; zero the top-k salient bits of the correct molecule vs. k random 
 - Deleting salient bits hurts **~16×** more than random deletion and destroys rank-1 hits.
 - Deleting the least-salient (negative) bits *improves* the score.
 - The fast proxy and the exact leave-one-out ranking give nearly identical drops (0.164 vs 0.165 at k=3).
-- This is model-faithfulness evidence; chemical validity is tested separately in E13. An atom-level deletion variant is being rerun after a code fix.
+- This is model-faithfulness evidence; chemical validity is tested separately in E13.
+- **Atom-level variant:** deleting the atoms of the top-1 salient environment from the molecule (RDKit edit, fingerprint recomputed) in 68 correctly retrieved molecules **loses the rank-1 hit in 57 (83.8%)**, mean score drop 0.206. There is no random-atom control for this variant yet.
 
 ### E12: salts and counterions in the saliency ✅ (R1's Fig. 3 concern confirmed and explained)
 - **204/435 test rows (47%) are salts or have counterions.** In the paper checkpoint the **top-1 salient bit is a counterion-only environment for 156 of them (76%)**; a counterion bit is in the top 6 for 186 (91%); 22% of absolute attribution mass sits on counterion bits.
@@ -412,3 +413,30 @@ Downloaded all ChEMBL mechanism rows with no phase filter (`nmi/e05_download_exp
 
 - **For investigational compounds, names *hurt*:** rich 0.107 < name-free 0.147, because their names are mostly development codes that carry no INN-stem signal.
 - **The name shortcut only works for drugs with informative INN names.** That's a useful robustness argument for name-free evaluation.
+
+### E6: established benchmarks (ChEBI-20, PubChem324kV2) ✅
+MoleculeLens trained exactly as in the paper on each benchmark's own train split (no target labels, so the loss reduces to symmetric InfoNCE; text max length 256). Text → molecule retrieval, 3 seeds:
+
+| Benchmark | Text pooling | R@1 | R@10 | R@20 | MRR | R@1 on scaffold-novel test molecules |
+|---|---|---|---|---|---|---|
+| ChEBI-20 (test gallery 3,300) | CLS (paper) | 0.558 ± 0.002 | 0.855 | 0.893 | 0.663 | 0.299 |
+| ChEBI-20 | **mean** | **0.603 ± 0.005** | 0.880 | 0.917 | 0.702 | 0.356 |
+| PubChem324kV2 (test gallery 2,000) | CLS (paper) | 0.357 ± 0.006 | 0.618 | 0.682 | 0.446 | 0.217 |
+| PubChem324kV2 | **mean** | **0.392 ± 0.007** | 0.650 | 0.710 | 0.482 | 0.234 |
+
+**ChEBI-20 ranked against all 33,008 molecules (Text2Mol protocol):** mean pooling gives Hits@1 0.304, Hits@10 0.650, MRR 0.415 (CLS: 0.270 / 0.603 / 0.372).
+
+**Published reference points (to verify against the original papers; the protocols differ between papers):**
+- ChEBI-20, Text2Mol ensemble: Hits@1 34.4, Hits@10 81.1, MRR 0.499 ([Text2Mol](https://ml.paperswithcode.com/paper/text2mol-cross-modal-molecule-retrieval-with)).
+- ChEBI-20, recent alignment models (AMAN, ORMA, CLASS): Hits@1 about 49–67 ([ORMA](https://arxiv.org/html/2411.11875v1), [CLASS](https://arxiv.org/pdf/2502.11633)).
+- PubChem324k, MoleculeSTM: full-test text → molecule accuracy about 44 according to an aggregator; I could not confirm it from MolCA's own table ([MolCA](https://arxiv.org/pdf/2310.12798)).
+
+**Two findings that support the paper's motivation (R3 Q3, "why a new benchmark"):**
+1. **These benchmarks use random splits:** 84.2% of ChEBI-20 and 69.5% of PubChem324k test molecules have a Murcko scaffold seen in training.
+2. **On scaffold-novel test molecules R@1 roughly halves:** ChEBI-20 drops from 0.603 to 0.356, PubChem324k from 0.392 to 0.234.
+
+Published leaderboard numbers therefore largely measure in-scaffold retrieval, which is the gap our scaffold-disjoint, leakage-controlled benchmark is designed to expose.
+
+A model of two linear heads is competitive with early published models (it reaches roughly the level of the Text2Mol ensemble) while staying fully decomposable. Mean pooling again beats CLS (+4–5 R@1), consistent with E14.
+
+PCdes (KV-PLM) was not run: it has to be rebuilt from raw files (`generate_PCdes.py`). It is listed as remaining work.

@@ -5,4 +5,4 @@
 | 5 | 0.2328 | 0.2299 | 0.0230 | -0.1247 | 100.0% | 0.7% / 12.6% / 43.4% |
 | 10 | 0.3641 | 0.3488 | 0.0480 | -0.1811 | 100.0% | 0.0% / 9.6% / 58.2% |
 
-Atom-level deletion: no valid cases.
+Atom-level: deleting the atoms of the top-1 salient environment in 68 correctly retrieved molecules loses the rank-1 hit in 57 (83.8%); mean score drop 0.2062.

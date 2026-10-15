@@ -46,9 +46,9 @@
     }
   },
   "atom_deletion_top1_env": {
-    "n": 0,
-    "lost_rank1": 0,
-    "mean_drop": null
+    "n": 68,
+    "lost_rank1": 57,
+    "mean_drop": 0.2061600321355988
   },
   "baseline_rank1_hits": 98
 }
