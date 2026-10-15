@@ -156,6 +156,40 @@ Priority: **P0** = required before resubmission · **P1** = strongly expected ·
 
 ## 5. Results log (overnight run, 2026-10-14/15)
 
+### ⭐ Overnight summary (read this first)
+21 experiments run. Code in `MoleculeLens/nmi/`, raw results in `MoleculeLens/nmi_results/`. Every number below is in the per-experiment sections.
+
+**Corrections the paper needs:**
+1. The "retrained no-drug" R@1 0.110 is a pairing bug; the correct value is **0.145**. The leakage drop is 35.6%, not 51.0% (E1).
+2. The +9.6 R@1 margin over MolPrompt mixes tie rules. Under the same rule it is +8.5 (optimistic) or **+4.2 (structure-deduplicated gallery, recommended)** (E1).
+3. The headline 0.225 is a favourable seed; **10-seed mean 0.213 ± 0.010** (E8).
+4. **MoleculeSTM on the scaffold test (zero-shot) matches or beats MoleculeLens with names** (R@1 struct 0.230 vs 0.208), so "strongest top-rank retrieval" is not true for rich text (E2).
+5. **§3.3 logit lens is wrong.** With a per-layer head the signal exists from layer 1, and a bag of token embeddings (layer 0, mean pool) is best (E14).
+6. **76% of top-1 saliency on salt rows is counterion bits**, driven by salt words in the drug name (E12).
+7. The target-split rich score is inflated by molecule overlap (33% of test molecules in train) (E7b).
+
+**What holds up, and is stronger than claimed:**
+- **Name-free, MoleculeLens beats every baseline.** Paper config: 0.145 vs MolPrompt 0.074, MoleculeSTM 0.060, KV-PLM 0.034 (E1, E2). **Final model: 0.201 vs MolPrompt 0.097 on the deduplicated gallery, +10.7 [+5.2, +16.2]** (E21).
+- **The saliency is causally faithful** (deleting the top bits destroys hits, 16× more than random deletion) (E17), and **chemically grounded beyond chance and text-specifically** (top-3 pharmacophore hit 0.70 → 0.84 in the final model vs 0.50 chance), while MolPrompt's attributions are at chance (E13, E16, E21).
+- **The canonical split was not cherry-picked:** it is the second-hardest of 10 partitions (E10).
+- **On ChEBI-20 / PubChem324k, a two-linear-head model is competitive with the original Text2Mol baseline.** Those benchmarks reuse 70–84% of test scaffolds in training, and on scaffold-novel molecules R@1 roughly halves, which is the motivation for our benchmark (E6).
+
+**Recommended NMI framing:** an interpretable *leakage audit* of drug–text retrieval.
+1. Names, INN stems, salt words and molecule overlap inflate scores for every model.
+2. MoleculeLens's closed-form lens is what exposes these shortcuts.
+3. Once they are removed, MoleculeLens is the best name-free model and its explanations are the only ones that are chemically grounded.
+
+**Recommended final model (E21):** parent (salt-stripped) ECFP4 with 8192 bits, mean-pooled S-Biomed-RoBERTa, 1024-d shared space, trained on all-phase ChEMBL (5,035 pairs). Evaluate name-free on the structure-deduplicated gallery over 10 scaffold partitions.
+
+**Not done; needs you, or more time:**
+- PCdes benchmark (must be rebuilt from KV-PLM raw files).
+- A real expert rating study (E13 is an automated proxy).
+- MolPrompt and MoleculeSTM retrained on the all-phase data and the OOD splits.
+- Integrated gradients for MolPrompt.
+- Check the test-drug overlap with MoleculeSTM's PubChemSTM pretraining set.
+- KV-PLM per-example ranks (only aggregate metrics are stored).
+- All writing and figure redraws (§2 of this file): Eq. 1 mask, definitions, Fig. 1/2/4/5, regenerate Fig. 3 with parent fingerprints, NMI restructuring.
+
 Code: `MoleculeLens/nmi/` (shared library `core.py`; one script per experiment).
 Raw outputs: `MoleculeLens/nmi_results/` (JSON + markdown per experiment).
 Hardware for this run: 1× NVIDIA **Tesla T4** 16 GB (GCP `n1-standard-4`, us-central1-a). L4 GPUs were sold out across the US.
@@ -488,3 +522,33 @@ The "paper config" target numbers in the raw E21 output (0.111 / 0.348) still co
 Deletion check on the final model (score drop for top-k salient vs random k bits): k=1 0.049 vs 0.002; k=3 0.134 vs 0.008; k=5 0.204 vs 0.014.
 
 **Bottom line:** removing the shortcuts the reviewers suspected (names, salts, collisions) and adding data makes MoleculeLens **both more accurate without names and more chemically grounded**. The +10.7-point name-free margin over MolPrompt is a clean replacement for the paper's +9.6 headline, which mixed tie rules and names.
+
+### E2: MoleculeSTM on the scaffold test ✅ (important for the headline)
+MoleculeSTM-SMILES (MegaMolBART + SciBERT, pretrained checkpoint), canonical scaffold test, N=435:
+
+| MoleculeSTM variant | R@1 | R@1 struct | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|
+| zero-shot, rich | 0.202 | **0.230** | 0.515 | 0.630 | 0.348 |
+| zero-shot, no-drug | 0.060 | 0.062 | 0.172 | 0.267 | 0.127 |
+| zero-shot, mechanism-only | 0.057 | 0.057 | 0.191 | 0.294 | 0.135 |
+| frozen MoleculeSTM encoders + MoleculeLens linear bridge, rich (5 seeds) | 0.250 | **0.283** | 0.569 | 0.681 | 0.393 |
+| same, no-drug | 0.070 | 0.076 | 0.234 | 0.364 | 0.160 |
+| same, mechanism-only | 0.076 | 0.080 | 0.233 | 0.350 | 0.161 |
+
+- **The scaffold row R3 asked for overturns the paper's "strongest top-rank retrieval" claim for rich text.** Zero-shot MoleculeSTM already matches MoleculeLens (struct 0.230 vs 0.208) and is much stronger at R@5/R@10. With a trained bridge it reaches 0.283.
+- **MoleculeSTM is far more name-dependent.** It loses 73% of R@1 when the name is removed (0.230 → 0.062). Name-free, MoleculeLens is about 2.4× better (paper config 0.149) and **about 3.2× better as the final model (0.201)**.
+- **Probable cause (not verified):** MoleculeSTM was pretrained on PubChem descriptions, which name these approved drugs, so its "zero-shot" rich-text score likely benefits from memorised name-structure pairs. Checking the overlap of our 435 test drugs with PubChemSTM is a recommended follow-up.
+- **Action:** the honest headline is the **name-free** comparison, where MoleculeLens leads every baseline: final 0.201 vs MolPrompt 0.097, MoleculeSTM 0.062 / 0.076, KV-PLM 0.034 (optimistic rule). Report the rich-text row too, and state plainly that MoleculeSTM is stronger there.
+- Technical note: MegaMolBART needs `apex`. The compiled apex on the VM was built for the L4 and fails on the T4, so `FusedLayerNorm` was replaced by the numerically equivalent `torch.nn.LayerNorm` (shim in `~/nmi_shim`).
+
+### E16: attribution for MolPrompt on the same pharmacophore test ✅
+MolPrompt (fine-tuned checkpoint) gradient × input at the atom-embedding layer, same 16 classes, 86 pairs, same controls as E13:
+
+| Model / attribution | mass on pharmacophore (chance 0.26–0.27) | top-3 hit (chance 0.50) | p (correct > wrong text) | time per explanation |
+|---|---|---|---|---|
+| MolPrompt, gradient × input | 0.26 | 0.43 | 0.98 (n.s.) | 0.070 s |
+| **MoleculeLens, paper model (Eq. 1)** | **0.31** | **0.70** | **3×10⁻⁷** | 0.0006 s |
+| **MoleculeLens, final model** | **0.43** | **0.84** | **5×10⁻¹⁵** | 0.0006 s |
+
+- **This answers R3 Q9 directly.** MolPrompt's attributions sit at chance and are not text-specific, while MoleculeLens's closed-form saliency is significantly grounded and about 100× cheaper.
+- Caveat: only one attribution method (gradient × input) was tried for MolPrompt. Integrated gradients would make the comparison more robust.
