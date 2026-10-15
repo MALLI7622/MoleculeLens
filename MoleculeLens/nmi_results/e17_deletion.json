@@ -1,0 +1,54 @@
+{
+  "bit_deletion": {
+    "1": {
+      "mean_score_drop_top": 0.0770174138039222,
+      "mean_score_drop_exact_top": 0.07865233984454696,
+      "mean_score_drop_random": 0.004870196848026552,
+      "mean_score_drop_least": -0.038354214186105746,
+      "top_gt_random_share": 0.9977011494252873,
+      "rank1_retained_top": 0.08275862068965517,
+      "rank1_retained_random": 0.1642528735632184,
+      "rank1_retained_least": 0.26436781609195403,
+      "n_pairs": 435
+    },
+    "3": {
+      "mean_score_drop_top": 0.1641661847711423,
+      "mean_score_drop_exact_top": 0.16451362439902265,
+      "mean_score_drop_random": 0.013761600580912126,
+      "mean_score_drop_least": -0.08898196624345735,
+      "top_gt_random_share": 1.0,
+      "rank1_retained_top": 0.041379310344827586,
+      "rank1_retained_random": 0.14103448275862068,
+      "rank1_retained_least": 0.35402298850574715,
+      "n_pairs": 435
+    },
+    "5": {
+      "mean_score_drop_top": 0.23280344703127684,
+      "mean_score_drop_exact_top": 0.22987479745924216,
+      "mean_score_drop_random": 0.02302630655116926,
+      "mean_score_drop_least": -0.12474216595452664,
+      "top_gt_random_share": 1.0,
+      "rank1_retained_top": 0.006896551724137931,
+      "rank1_retained_random": 0.12551724137931033,
+      "rank1_retained_least": 0.43448275862068964,
+      "n_pairs": 435
+    },
+    "10": {
+      "mean_score_drop_top": 0.36413474900637294,
+      "mean_score_drop_exact_top": 0.34882981844899386,
+      "mean_score_drop_random": 0.04796617065518881,
+      "mean_score_drop_least": -0.18113502938589401,
+      "top_gt_random_share": 1.0,
+      "rank1_retained_top": 0.0,
+      "rank1_retained_random": 0.09620689655172412,
+      "rank1_retained_least": 0.5816091954022988,
+      "n_pairs": 435
+    }
+  },
+  "atom_deletion_top1_env": {
+    "n": 0,
+    "lost_rank1": 0,
+    "mean_drop": null
+  },
+  "baseline_rank1_hits": 98
+}

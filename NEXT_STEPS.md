@@ -223,3 +223,110 @@ Single-label diagonal evaluation therefore caps no-drug R@1 at **0.448** (mechan
 | Graphormer | none (zero-shot) | `graphormer-base-pcqm4mv1` | scaffold test 435 |
 
 The rows labelled "zero-shot" are not adapted to our data, which disadvantages them relative to the trained MoleculeLens and the fine-tuned MolPrompt. Say this explicitly in the paper.
+
+### E8–E11: seeds, cluster bootstrap, partitions, leakage variance ✅
+Full tables: `MoleculeLens/nmi_results/e08_seeds_partitions.md`.
+
+**E8, headline config across 10 initialisation seeds (canonical split):**
+
+| Text | R@1 | R@1 struct | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|
+| rich | 0.213 ± 0.010 | 0.201 ± 0.009 | 0.384 ± 0.009 | 0.468 ± 0.012 | 0.299 ± 0.007 |
+| retrained no-drug | 0.129 ± 0.005 | 0.126 ± 0.006 | 0.337 ± 0.007 | 0.437 ± 0.008 | 0.228 ± 0.004 |
+| mechanism-only | 0.130 ± 0.005 | 0.127 ± 0.005 | 0.339 ± 0.009 | 0.450 ± 0.007 | 0.229 ± 0.003 |
+
+The paper's checkpoint (0.225) sits about 1.2 SD above the 10-seed mean. Report **0.213 ± 0.010** as the headline instead.
+
+**E9, parent-cluster bootstrap** (318 parent structures / 435 rows), seed 0: R@1 0.200 [0.159, 0.243], R@5 0.379 [0.326, 0.434], R@10 0.462 [0.405, 0.518], MRR 0.290 [0.250, 0.332].
+
+**E10:** scaffold partitions built with the paper's own recipe (`07_make_chembl_split_manifest.py`). **Partition 0 reproduces the canonical manifest exactly**, which answers R3 Q5 ("no seed reproduces the canonical split"). The paper's Table 3 used a *different* 90/10 recipe (`12c`), which is why its test sizes did not match.
+
+| Partition | n_test | R@1 rich | R@1 no-drug (retrained) | R@1 same-model no-name | drop (retrained) | drop (same model) |
+|---|---|---|---|---|---|---|
+| 0 (= canonical) | 435 | 0.200 | 0.126 | 0.094 | 36.8% | 52.9% |
+| 1 | 294 | 0.303 | 0.201 | 0.133 | 33.7% | 56.2% |
+| 2 | 221 | 0.276 | 0.244 | 0.131 | 11.5% | 52.5% |
+| 3 | 258 | 0.295 | 0.244 | 0.116 | 17.1% | 60.5% |
+| 4 | 411 | 0.226 | 0.158 | 0.085 | 30.1% | 62.4% |
+| 5 | 255 | 0.353 | 0.231 | 0.118 | 34.4% | 66.7% |
+| 6 | 240 | 0.383 | 0.233 | 0.117 | 39.1% | 69.6% |
+| 7 | 211 | 0.275 | 0.223 | 0.076 | 19.0% | 72.4% |
+| 8 | 374 | 0.176 | 0.118 | 0.088 | 33.3% | 50.0% |
+| 9 | 211 | 0.408 | 0.318 | 0.199 | 22.1% | 51.2% |
+| **mean [95% t-CI]** | | **0.289** [0.235, 0.344] | 0.210 [0.166, 0.253] | 0.116 [0.090, 0.141] | **27.7%** [20.9, 34.5] | **59.4%** [53.6, 65.2] |
+
+- **The canonical split is the second-hardest of 10**, so it was not cherry-picked in our favour.
+- **E11:** the retrained leakage drop ranges from 11.5% to 39.1%, so a single-split leakage number should not be quoted. Report 27.7% [20.9, 34.5] (retrained) and 59.4% [53.6, 65.2] (same model).
+
+### E4: what in the drug name drives retrieval (INN stems) ✅
+Canonical split, model retrained per text variant, 5 seeds:
+
+| Text the model sees | R@1 | R@1 struct | MRR |
+|---|---|---|---|
+| rich (mechanism + target + action + name) | 0.214 ± 0.013 | 0.202 | 0.297 |
+| **name only** (`Drug: X.`) | **0.195 ± 0.014** | 0.182 | 0.271 |
+| name replaced by its 5-letter stem (`-tinib`) | 0.169 ± 0.005 | 0.161 | 0.260 |
+| no name | 0.130 ± 0.007 | 0.127 | 0.228 |
+| mechanism only | 0.130 ± 0.005 | 0.128 | 0.229 |
+| names shuffled across drugs | **0.093 ± 0.007** | 0.089 | 0.164 |
+
+- **The drug name alone carries ~91% of the rich-text R@1** (0.195 / 0.214).
+- **The INN stem alone recovers ~46% of the name's gain** (0.130 → 0.169 of 0.130 → 0.214); 69.7% of test drugs share their 5-letter stem with a training drug. This confirms R3 Q6.
+- **A wrong name is worse than no name** (0.093 < 0.130), so the model actively uses the name.
+
+### E7: target-disjoint and joint scaffold+target splits ✅
+5 partitions each, init seed 0:
+
+| Split | n_test | R@1 rich | R@1 no-drug | R@1 mechanism-only |
+|---|---|---|---|---|
+| scaffold-disjoint | 324 | 0.260 ± 0.045 | 0.195 ± 0.052 | 0.197 ± 0.059 |
+| **target-disjoint** | 278 | 0.342 ± 0.049 | **0.098 ± 0.019** | 0.097 ± 0.013 |
+| **scaffold- and target-disjoint** | 250 | 0.102 ± 0.026 | **0.060 ± 0.017** | 0.061 ± 0.022 |
+
+- **For unseen targets, name-free retrieval collapses** (0.195 → 0.098). The rich-text score *rises* (0.342) because names and target names still identify the drug.
+- **When both chemistry and biology are new, only 6% of name-free queries retrieve the right drug.**
+- Mechanism-level generalisation to new targets is the real open problem, and the paper should say so (R1's OOD point).
+
+### E14: logit lens with a separately trained head per layer ✅ (overturns §3.3)
+| Layer | reused L12 head (paper) | own head, CLS | own head, mean-pooled tokens |
+|---|---|---|---|
+| 0 (embeddings) | 0.002 | 0.002 (CLS = constant `<s>`) | **0.275** |
+| 1 | 0.002 | 0.180 ± 0.020 | 0.268 |
+| 6 | 0.002 | 0.074 ± 0.005 | 0.273 |
+| 9 | 0.002 | 0.160 ± 0.011 | 0.260 |
+| 11 | 0.005 | **0.213 ± 0.007** | 0.234 |
+| 12 | 0.200 | 0.207 ± 0.007 | 0.225 |
+
+- **R3 Q10 is correct.** With its own head, the CLS state carries drug-retrievable signal from layer 1 onwards (0.180), and layer 11 ≥ layer 12.
+- **Mean-pooled raw token embeddings (layer 0, essentially a bag of words) give the best text representation of all (0.275).** Retrieval on this benchmark is largely lexical matching.
+- **Action:** drop the "signal appears only at layer 12" claim. Replace §3.3 with this per-layer table and the lexical-shortcut interpretation. Consider mean pooling as the default text representation.
+
+### E15: fingerprint bit collisions ✅
+- **2048-bit ECFP4:** 99.3% of active bits host more than one distinct environment (mean 7.2 per bit), and 99.8% of top-10 salient entries fall on collided bits. A salient bit is **not** a unique substructure. Mapping a bit to the environments actually present in *that* molecule (as Fig. 3 does) is still well-defined, but should be stated explicitly.
+- **Training exposure is not a problem:** median 50 training molecules per salient entry; 1.8% of entries are on bits seen in fewer than 5 training molecules; 0% on never-seen bits.
+- **Larger folds reduce collisions and improve retrieval:**
+
+| Fold | collision rate | R@1 (5 seeds) | MRR |
+|---|---|---|---|
+| 1024 | 100% | 0.207 ± 0.012 | 0.291 |
+| 2048 (paper) | 99.3% | 0.214 ± 0.013 | 0.297 |
+| 4096 | 89.1% | 0.251 ± 0.008 | 0.333 |
+| **8192** | 62.4% | **0.263 ± 0.006** | 0.347 |
+| 16384 | 37.6% | 0.258 ± 0.007 | 0.349 |
+
+**Action:** move to 8192 bits. That's +5 R@1 points with ~38% fewer collisions.
+
+### E17: deletion test (causal check of the saliency) ✅
+All 435 pairs; zero the top-k salient bits of the correct molecule vs. k random or k least-salient bits:
+
+| k | score drop, top-k | random k | least-salient k | top > random (pairs) | rank-1 hits kept: top / random / least (baseline 22.5%) |
+|---|---|---|---|---|---|
+| 1 | 0.077 | 0.005 | −0.038 | 99.8% | 8.3% / 16.4% / 26.4% |
+| 3 | 0.164 | 0.014 | −0.089 | 100% | 4.1% / 14.1% / 35.4% |
+| 5 | 0.233 | 0.023 | −0.125 | 100% | 0.7% / 12.6% / 43.4% |
+| 10 | 0.364 | 0.048 | −0.181 | 100% | 0.0% / 9.6% / 58.2% |
+
+- Deleting salient bits hurts **~16×** more than random deletion and destroys rank-1 hits.
+- Deleting the least-salient (negative) bits *improves* the score.
+- The fast proxy and the exact leave-one-out ranking give nearly identical drops (0.164 vs 0.165 at k=3).
+- This is model-faithfulness evidence; chemical validity is tested separately in E13. An atom-level deletion variant is being rerun after a code fix.

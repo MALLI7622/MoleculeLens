@@ -127,6 +127,26 @@ def _encoder():
 
 
 @torch.no_grad()
+def encode_texts_meanpool(texts: list[str], bs: int = 64) -> torch.Tensor:
+    """Final-layer mean-pooled token embeddings (masked). Cached."""
+    key = hashlib.md5(("\n".join(texts) + f"|{MAX_TXT_LEN}|mean").encode()).hexdigest()[:16]
+    path = CACHE / f"textmean_{key}.pt"
+    if path.exists():
+        return torch.load(path)
+    tok, enc = _encoder()
+    outs = []
+    for i in range(0, len(texts), bs):
+        b = tok(texts[i:i + bs], padding=True, truncation=True, max_length=MAX_TXT_LEN,
+                return_tensors="pt").to(DEVICE)
+        h = enc(**b).last_hidden_state
+        m = b["attention_mask"].unsqueeze(-1).float()
+        outs.append(((h * m).sum(1) / m.sum(1)).cpu())
+    Z = torch.cat(outs, 0)
+    torch.save(Z, path)
+    return Z
+
+
+@torch.no_grad()
 def encode_texts(texts: list[str], all_layers: bool = False, bs: int = 64) -> torch.Tensor:
     """CLS embeddings. Returns [N,768] (final layer) or [N,13,768] if all_layers.
     Cached on disk by content hash."""
@@ -220,9 +240,22 @@ def _group_split(groups: np.ndarray, seed: int, frac_test=0.1, frac_val=0.1) -> 
             "test": [int(i) for i in idx if groups[i] in test_g]}
 
 
-def scaffold_split(df, seed) -> dict:
-    sc = df["smiles"].map(lambda s: murcko(s) or s).values
-    return _group_split(sc, seed)
+def scaffold_split(df, seed, frac_train=0.8, frac_val=0.1) -> dict:
+    """Exact recipe of 07_make_chembl_split_manifest.py (seed 0 == canonical manifest):
+    first-appearance scaffold order, acyclic molecules share the empty scaffold '', int() cuts."""
+    sc = df["smiles"].map(murcko)
+    ok = sc.notna().values
+    scaffolds = sc[ok].unique().tolist()
+    rng = np.random.default_rng(seed)
+    rng.shuffle(scaffolds)
+    n = len(scaffolds)
+    c1, c2 = int(frac_train * n), int((frac_train + frac_val) * n)
+    sets = {"train": set(scaffolds[:c1]), "val": set(scaffolds[c1:c2]), "test": set(scaffolds[c2:])}
+    return {k: [int(i) for i in np.where(ok & sc.isin(v).values)[0]] for k, v in sets.items()}
+
+
+def scaffold_of_rows(df) -> np.ndarray:
+    return df["smiles"].map(lambda s: murcko(s) if murcko(s) is not None else s).values
 
 
 def target_split(df, seed) -> dict:
@@ -330,6 +363,63 @@ def strip(m: dict) -> dict:
     return {k: float(v) for k, v in m.items() if k != "ranks"}
 
 
+def structure_r1(S, smiles_test) -> float:
+    """R@1 against a structure-deduplicated gallery (unique SMILES), random tie-break (expected).
+    Recommended main protocol (see E1): multi-mechanism drugs are not double-counted and
+    identical-fingerprint ties cannot inflate the score."""
+    g = group_ids(smiles_test)
+    G = g.max() + 1
+    rep = np.array([np.where(g == k)[0][0] for k in range(G)])
+    Sg = np.asarray(S)[:, rep]
+    own = Sg[np.arange(len(g)), g]
+    gt = np.sum(Sg > own[:, None] + 1e-7, axis=1)
+    eq = np.sum(np.abs(Sg - own[:, None]) <= 1e-7, axis=1)
+    return float(np.mean((gt == 0) / eq))
+
+
+# ---------------------------------------------------------------------------
+# attribution (paper Eq. 1 restricted to present bits, as in Appendix D)
+# ---------------------------------------------------------------------------
+@torch.no_grad()
+def saliency(pt, pm, z_text: np.ndarray, x_mol: np.ndarray) -> np.ndarray:
+    """attr_k = x_k * [W_m^T b_t_hat]_k for one (text, molecule) pair; zeros for absent bits."""
+    bt = F.normalize(pt(torch.as_tensor(z_text, dtype=torch.float32)[None]), dim=1)[0]
+    w = (pm.weight.T @ bt).numpy()
+    return np.asarray(x_mol) * w
+
+
+def bit_environments(smi: str, radius=2, nbits=2048, parent=False) -> dict:
+    """{bit: [(center_atom, radius), ...]} for a folded Morgan fingerprint."""
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+    m = Chem.MolFromSmiles(parent_smiles(smi) if parent else smi)
+    info = {}
+    if m is not None:
+        AllChem.GetMorganFingerprintAsBitVect(m, radius, nBits=nbits, bitInfo=info)
+    return info
+
+
+def env_atoms(mol, center, rad) -> set:
+    from rdkit import Chem
+    if rad == 0:
+        return {center}
+    bonds = Chem.FindAtomEnvironmentOfRadiusN(mol, rad, center)
+    atoms = {center}
+    for b in bonds:
+        bd = mol.GetBondWithIdx(b)
+        atoms.update([bd.GetBeginAtomIdx(), bd.GetEndAtomIdx()])
+    return atoms
+
+
+def env_smiles(mol, center, rad) -> str:
+    from rdkit import Chem
+    if rad == 0:
+        return mol.GetAtomWithIdx(center).GetSymbol()
+    bonds = Chem.FindAtomEnvironmentOfRadiusN(mol, rad, center)
+    sub = Chem.PathToSubmol(mol, bonds)
+    return Chem.MolToSmiles(sub)
+
+
 # ---------------------------------------------------------------------------
 # uncertainty
 # ---------------------------------------------------------------------------
@@ -389,7 +479,9 @@ def run_split(df, split: dict, text: str = "rich", seed=0, radius=2, nbits=2048,
     pt, pm = train_bridge(Zall[tr], Xall[tr], groups[tr], seed=seed, dim=dim, loss=loss)
     S = similarity(pt, pm, Zall[te], Xall[te])
     m = metrics(S)
-    out = {"metrics": strip(m), "ranks": m["ranks"].tolist(), "n_test": int(len(te)),
+    mm = strip(m)
+    mm["R@1_struct"] = structure_r1(S, df["smiles"].values[te])
+    out = {"metrics": mm, "ranks": m["ranks"].tolist(), "n_test": int(len(te)),
            "n_train": int(len(tr))}
     if return_model:
         out["model"] = (pt, pm)

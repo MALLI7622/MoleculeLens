@@ -1,0 +1,361 @@
+{
+  "counterion_saliency_paper_model": {
+    "test_rows_with_salt_or_counterion": 204,
+    "of_435": 435,
+    "top1_bit_is_counterion_only": 156,
+    "any_top6_bit_counterion_only": 186,
+    "mean_abs_attribution_mass_on_counterion_bits": 0.22395729702696496
+  },
+  "retrieval_original_vs_parent_fp_10seeds": {
+    "original": {
+      "R@1": [
+        0.21287356321839082,
+        0.010177445343070643
+      ],
+      "R@5": [
+        0.3841379310344828,
+        0.00916021364123747
+      ],
+      "R@10": [
+        0.4682758620689655,
+        0.011623791135777016
+      ],
+      "MRR": [
+        0.29856499421246496,
+        0.00729783087236022
+      ],
+      "R@1_struct": [
+        0.20080459770114945,
+        0.009116036808688902
+      ]
+    },
+    "parent": {
+      "R@1": [
+        0.20643678160919543,
+        0.0057138243317416855
+      ],
+      "R@5": [
+        0.34229885057471265,
+        0.00799656419812694
+      ],
+      "R@10": [
+        0.39448275862068966,
+        0.0060531548377414516
+      ],
+      "MRR": [
+        0.2730385550722293,
+        0.004203427167842928
+      ],
+      "R@1_struct": [
+        0.15973180076628352,
+        0.0056438861004380406
+      ]
+    }
+  },
+  "fig3_cases": {
+    "MAFENIDE": {
+      "name": "MAFENIDE ACETATE",
+      "expected": "sulfonamide",
+      "paper_model_original_fp": {
+        "top6": [
+          {
+            "bit": 508,
+            "attr": 0.26493144035339355,
+            "env": "CC(=O)O"
+          },
+          {
+            "bit": 1017,
+            "attr": 0.06448010355234146,
+            "env": "CC"
+          },
+          {
+            "bit": 350,
+            "attr": 0.04921581596136093,
+            "env": "S"
+          },
+          {
+            "bit": 1476,
+            "attr": 0.048360809683799744,
+            "env": "O=S"
+          },
+          {
+            "bit": 389,
+            "attr": 0.040724605321884155,
+            "env": "CO"
+          },
+          {
+            "bit": 1489,
+            "attr": 0.0388343445956707,
+            "env": "ccc(cc)S(N)(=O)=O"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      },
+      "parent_model_parent_fp": {
+        "top6": [
+          {
+            "bit": 715,
+            "attr": -0.03224610537290573,
+            "env": "cccc(c)S"
+          },
+          {
+            "bit": 350,
+            "attr": 0.031714554876089096,
+            "env": "S"
+          },
+          {
+            "bit": 1476,
+            "attr": 0.028692014515399933,
+            "env": "O=S"
+          },
+          {
+            "bit": 1197,
+            "attr": 0.019827770069241524,
+            "env": "cc(c)S(N)(=O)=O"
+          },
+          {
+            "bit": 1748,
+            "attr": -0.017573468387126923,
+            "env": "cCN"
+          },
+          {
+            "bit": 1039,
+            "attr": 0.01704382337629795,
+            "env": "ccc(cc)CN"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      }
+    },
+    "CARBAMAZEPINE": {
+      "name": "CARBAMAZEPINE",
+      "expected": "dibenzazepine carboxamide",
+      "paper_model_original_fp": {
+        "top6": [
+          {
+            "bit": 2043,
+            "attr": 0.0703447237610817,
+            "env": "cc(c)N(C(N)=O)c(c)c"
+          },
+          {
+            "bit": 1739,
+            "attr": 0.05932718515396118,
+            "env": "cN(c)C(N)=O"
+          },
+          {
+            "bit": 140,
+            "attr": 0.057822663336992264,
+            "env": "CN"
+          },
+          {
+            "bit": 1242,
+            "attr": -0.03423262760043144,
+            "env": "ccc(c(c)C)N(C)c"
+          },
+          {
+            "bit": 935,
+            "attr": 0.03390383720397949,
+            "env": "N"
+          },
+          {
+            "bit": 1171,
+            "attr": 0.033617548644542694,
+            "env": "N"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      },
+      "parent_model_parent_fp": {
+        "top6": [
+          {
+            "bit": 461,
+            "attr": 0.06098245456814766,
+            "env": "CN(c)c"
+          },
+          {
+            "bit": 1739,
+            "attr": 0.05639948323369026,
+            "env": "cN(c)C(N)=O"
+          },
+          {
+            "bit": 2043,
+            "attr": 0.051580220460891724,
+            "env": "cc(c)N(C(N)=O)c(c)c"
+          },
+          {
+            "bit": 435,
+            "attr": 0.04231032356619835,
+            "env": "NC(N)=O"
+          },
+          {
+            "bit": 780,
+            "attr": 0.0373237170279026,
+            "env": "cc(c)C=Cc"
+          },
+          {
+            "bit": 547,
+            "attr": 0.03138742223381996,
+            "env": "C=Cc"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      }
+    },
+    "ALBUTEROL": {
+      "name": "ALBUTEROL",
+      "expected": "catecholamine-like ethanolamine",
+      "paper_model_original_fp": {
+        "top6": [
+          {
+            "bit": 606,
+            "attr": 0.09689545631408691,
+            "env": "CCN"
+          },
+          {
+            "bit": 1362,
+            "attr": 0.07855912297964096,
+            "env": "CC(c)O"
+          },
+          {
+            "bit": 1475,
+            "attr": 0.06033378466963768,
+            "env": "cccc(c)O"
+          },
+          {
+            "bit": 705,
+            "attr": 0.04976310953497887,
+            "env": "ccc(CO)c(c)O"
+          },
+          {
+            "bit": 269,
+            "attr": 0.046238552778959274,
+            "env": "CNCC(c)O"
+          },
+          {
+            "bit": 1578,
+            "attr": 0.04447680711746216,
+            "env": "CNC(C)(C)C"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      },
+      "parent_model_parent_fp": {
+        "top6": [
+          {
+            "bit": 603,
+            "attr": 0.06538165360689163,
+            "env": "CC(C)(C)N"
+          },
+          {
+            "bit": 1362,
+            "attr": 0.061554934829473495,
+            "env": "CC(c)O"
+          },
+          {
+            "bit": 89,
+            "attr": 0.05609344318509102,
+            "env": "CNC"
+          },
+          {
+            "bit": 1475,
+            "attr": 0.053025998175144196,
+            "env": "cccc(c)O"
+          },
+          {
+            "bit": 606,
+            "attr": 0.05015619471669197,
+            "env": "CCN"
+          },
+          {
+            "bit": 1578,
+            "attr": 0.04661375656723976,
+            "env": "CNC(C)(C)C"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": true,
+        "pharmacophore_atoms_found": true
+      }
+    },
+    "ACYCLOVIR": {
+      "name": "ACYCLOVIR SODIUM",
+      "expected": "guanine base",
+      "paper_model_original_fp": {
+        "top6": [
+          {
+            "bit": 1213,
+            "attr": 0.12805674970149994,
+            "env": "Na"
+          },
+          {
+            "bit": 696,
+            "attr": 0.10115733742713928,
+            "env": "cc(n)n(cn)CO"
+          },
+          {
+            "bit": 1069,
+            "attr": 0.09966107457876205,
+            "env": "COCCO"
+          },
+          {
+            "bit": 1725,
+            "attr": 0.09274794161319733,
+            "env": "cn(c)COC"
+          },
+          {
+            "bit": 613,
+            "attr": -0.08349625766277313,
+            "env": "cc([O-])nc(n)N"
+          },
+          {
+            "bit": 271,
+            "attr": 0.07016471773386002,
+            "env": "c[O-]"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": false,
+        "pharmacophore_atoms_found": false
+      },
+      "parent_model_parent_fp": {
+        "top6": [
+          {
+            "bit": 613,
+            "attr": -0.1031988263130188,
+            "env": "cc([O-])nc(n)N"
+          },
+          {
+            "bit": 1069,
+            "attr": 0.10046634823083878,
+            "env": "COCCO"
+          },
+          {
+            "bit": 1455,
+            "attr": 0.09311234951019287,
+            "env": "cn(c)C"
+          },
+          {
+            "bit": 1095,
+            "attr": 0.07534768432378769,
+            "env": "cc(c)ncn"
+          },
+          {
+            "bit": 696,
+            "attr": 0.0717114731669426,
+            "env": "cc(n)n(cn)CO"
+          },
+          {
+            "bit": 715,
+            "attr": 0.06891724467277527,
+            "env": "O"
+          }
+        ],
+        "top3_atoms_overlap_pharmacophore": false,
+        "pharmacophore_atoms_found": false
+      }
+    }
+  }
+}
