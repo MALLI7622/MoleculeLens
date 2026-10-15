@@ -151,3 +151,75 @@ Priority: **P0** = required before resubmission · **P1** = strongly expected ·
 | R3 Q9 – no attribution comparison with baselines | E16 |
 | R3 Q10 – mismatched logit-lens probe | E14 |
 | R3 W3 – Eq. 1, undefined terms, figure quality | §2.2, §2.3 |
+
+---
+
+## 5. Results log (overnight run, 2026-10-14/15)
+
+Code: `MoleculeLens/nmi/` (shared library `core.py`; one script per experiment).
+Raw outputs: `MoleculeLens/nmi_results/` (JSON + markdown per experiment).
+Hardware for this run: 1× NVIDIA **Tesla T4** 16 GB (GCP `n1-standard-4`, us-central1-a). L4 GPUs were sold out across the US.
+The paper's original runs used 1× NVIDIA **L4** 24 GB (`g2-standard-4`).
+
+### E00: pipeline sanity check ✅
+- The paper's saved checkpoint, run through the new pipeline, gives R@1 0.221. With the saved text embeddings it gives **0.2253**, matching the paper's 0.225. The 0.004 gap comes from GPU text-encoding numerics (max |ΔCLS| = 0.018; one query = 0.0023 R@1).
+- The vectorised loss equals the paper's loop implementation exactly (6.44997 vs 6.44997).
+- Retraining at seed 0 gives R@1 0.200, MRR 0.290 in 1.1 s on the T4.
+
+### E1: name-stripped baselines ✅ (with two corrections to the paper)
+**Correction 1: the paper's "retrained no-drug" R@1 = 0.110 is a pairing bug.**
+`09b_diagonal_artifact_sync.py` scores the no-drug model's *text* embeddings against the *rich* model's *molecule* embeddings (`outputs/Bm_test.pt`).
+Pairing the no-drug text with its own molecule head gives **R@1 0.145** (MRR 0.244).
+The leakage drop is therefore **35.6%** (0.225 → 0.145), not 51.0%.
+
+**Correction 2: tie handling inflates the headline margin.**
+87 of the 435 test rows have an ECFP4 vector identical to another test row (mostly the same drug under several mechanism rows).
+The shared evaluator counts ties as hits (optimistic), whereas MolPrompt's stored 0.129 came from its own scorer.
+Recomputing MolPrompt from its saved test embeddings under the shared rule gives 0.140.
+
+Main table (scaffold test, N=435; 95% CIs from a 10k cluster bootstrap over 358 unique test structures; shared optimistic-tie evaluator):
+
+| Model | Protocol | R@1 [95% CI] | R@5 | R@10 | MRR |
+|---|---|---|---:|---:|---:|
+| MoleculeLens, rich text | trained (scaffold train) | 0.225 [0.182, 0.271] | 0.384 | 0.464 | 0.303 |
+| MoleculeLens, retrained no-drug | trained | **0.145** [0.108, 0.184] | 0.359 | 0.464 | 0.244 |
+| MoleculeLens, mechanism-only | trained | 0.124 [0.092, 0.159] | 0.331 | 0.453 | 0.226 |
+| MoleculeLens, same model, name removed at inference | trained (rich) | 0.067 [0.040, 0.095] | 0.159 | 0.253 | 0.121 |
+| MolPrompt, rich | fine-tuned (scaffold train, best val epoch) | 0.140 [0.108, 0.176] | 0.400 | 0.533 | 0.265 |
+| MolPrompt, no-drug | fine-tuned | 0.074 [0.049, 0.102] | 0.287 | 0.418 | 0.182 |
+| KV-PLM, rich | zero-shot (pretrained retrieval ckpt) | 0.055 [0.037, 0.081]† | 0.172 | 0.251 | 0.121 |
+| KV-PLM, no-drug | zero-shot | 0.034 [0.021, 0.056]† | 0.110 | 0.179 | 0.084 |
+
+† Wilson interval; only aggregate KV-PLM metrics were stored.
+
+R@1 under different tie rules (both models scored by the same rule):
+
+| | optimistic | random tie-break | strict | **structure-deduplicated gallery** (recommended) |
+|---|---:|---:|---:|---:|
+| MoleculeLens rich | 0.225 | 0.179 | 0.147 | **0.208** |
+| MolPrompt rich | 0.140 | 0.130 | 0.122 | **0.166** |
+| MoleculeLens retrained no-drug | 0.145 | 0.107 | 0.076 | **0.139** |
+| MolPrompt no-drug | 0.074 | 0.070 | 0.067 | **0.087** |
+
+Paired R@1 differences (parent-cluster bootstrap, optimistic rule):
+- MoleculeLens rich − MolPrompt rich: **+0.085** [+0.035, +0.134], P(diff ≤ 0) = 0.0004
+- MoleculeLens no-drug − MolPrompt no-drug: **+0.071** [+0.031, +0.110], P = 0.0003
+- MoleculeLens no-drug − MolPrompt rich: +0.005 [−0.042, +0.051]. Without names, MoleculeLens matches MolPrompt *with* names.
+
+Ceiling: once names are removed, only 195 of the 435 test query texts are unique (identical mechanism text is shared across drugs).
+Single-label diagonal evaluation therefore caps no-drug R@1 at **0.448** (mechanism-only: 0.444), so low absolute no-drug numbers are partly a property of the evaluation.
+
+**Takeaway for R3 Q1:** the advantage survives name removal and holds under every tie rule, but the honest margin is about **+4 to +5 R@1 points** (structure-deduplicated gallery), not +9.6.
+- Report the structure-deduplicated gallery as the main protocol.
+- Fix the 0.110 → 0.145 number and the 51.0% → 35.6% leakage drop.
+
+### E3: how each baseline was run ✅ (from code and manifests)
+| Model | Training on our data | Checkpoint / protocol | Eval set |
+|---|---|---|---|
+| MoleculeLens | trains 2 linear heads on the scaffold train split (2,019 rows) | seed 0, 100 epochs | scaffold test 435 |
+| MolPrompt | **fine-tuned** on the same scaffold train split; best epoch chosen on val (26 rich / 27 no-drug), batch size 6 | `MolPrompt/main_chembl_retrieval.py` (`--remove_drug_name` for no-drug) | scaffold test 435 |
+| KV-PLM | none (**zero-shot**) | `pretrained_KV-PLM/ckpt_ret01.pt` | scaffold test 435 |
+| MoleculeSTM | none (**zero-shot**) | `chao1224/MoleculeSTM` SMILES checkpoint | full gallery 2,699 only (scaffold row: see E2) |
+| Graphormer | none (zero-shot) | `graphormer-base-pcqm4mv1` | scaffold test 435 |
+
+The rows labelled "zero-shot" are not adapted to our data, which disadvantages them relative to the trained MoleculeLens and the fine-tuned MolPrompt. Say this explicitly in the paper.
