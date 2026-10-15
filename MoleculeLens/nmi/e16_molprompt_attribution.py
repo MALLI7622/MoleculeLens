@@ -50,8 +50,12 @@ dft = df.iloc[te].reset_index(drop=True)
 cls_of = classify((dft.mechanism_of_action.fillna("") + " " + dft.target_name.fillna("")).values)
 
 store = {}
-model.graph_encoder.graph_node_feature.register_forward_hook(
-    lambda m, i, o: (o.retain_grad(), store.__setitem__("emb", o)))
+def _hook(m, i, o):
+    o.retain_grad()
+    store["emb"] = o          # must return None, otherwise the output is replaced
+
+
+model.graph_encoder.graph_node_feature.register_forward_hook(_hook)
 coll = partial(collator, max_node=512, multi_hop_max_dist=20, spatial_pos_max=20)
 
 

@@ -1,0 +1,74 @@
+{
+  "rows": [
+    {
+      "partition": 0,
+      "text": "rich",
+      "test_rows_whose_molecule_is_in_train": 0.2328767123287671,
+      "R@1_struct_as_E7": 0.2945205479452055,
+      "R@1_struct_molecule_overlap_removed": 0.10273972602739725
+    },
+    {
+      "partition": 0,
+      "text": "nodrug",
+      "test_rows_whose_molecule_is_in_train": 0.2328767123287671,
+      "R@1_struct_as_E7": 0.08904109589041095,
+      "R@1_struct_molecule_overlap_removed": 0.05821917808219178
+    },
+    {
+      "partition": 1,
+      "text": "rich",
+      "test_rows_whose_molecule_is_in_train": 0.32098765432098764,
+      "R@1_struct_as_E7": 0.3055555555555556,
+      "R@1_struct_molecule_overlap_removed": 0.12037037037037036
+    },
+    {
+      "partition": 1,
+      "text": "nodrug",
+      "test_rows_whose_molecule_is_in_train": 0.32098765432098764,
+      "R@1_struct_as_E7": 0.08333333333333333,
+      "R@1_struct_molecule_overlap_removed": 0.05555555555555555
+    },
+    {
+      "partition": 2,
+      "text": "rich",
+      "test_rows_whose_molecule_is_in_train": 0.29441624365482233,
+      "R@1_struct_as_E7": 0.3299492385786802,
+      "R@1_struct_molecule_overlap_removed": 0.1116751269035533
+    },
+    {
+      "partition": 2,
+      "text": "nodrug",
+      "test_rows_whose_molecule_is_in_train": 0.29441624365482233,
+      "R@1_struct_as_E7": 0.13705583756345177,
+      "R@1_struct_molecule_overlap_removed": 0.06598984771573604
+    },
+    {
+      "partition": 3,
+      "text": "rich",
+      "test_rows_whose_molecule_is_in_train": 0.4311594202898551,
+      "R@1_struct_as_E7": 0.41304347826086957,
+      "R@1_struct_molecule_overlap_removed": 0.09420289855072464
+    },
+    {
+      "partition": 3,
+      "text": "nodrug",
+      "test_rows_whose_molecule_is_in_train": 0.4311594202898551,
+      "R@1_struct_as_E7": 0.10144927536231885,
+      "R@1_struct_molecule_overlap_removed": 0.050724637681159424
+    },
+    {
+      "partition": 4,
+      "text": "rich",
+      "test_rows_whose_molecule_is_in_train": 0.39,
+      "R@1_struct_as_E7": 0.375,
+      "R@1_struct_molecule_overlap_removed": 0.08666666666666667
+    },
+    {
+      "partition": 4,
+      "text": "nodrug",
+      "test_rows_whose_molecule_is_in_train": 0.39,
+      "R@1_struct_as_E7": 0.09,
+      "R@1_struct_molecule_overlap_removed": 0.03666666666666667
+    }
+  ]
+}

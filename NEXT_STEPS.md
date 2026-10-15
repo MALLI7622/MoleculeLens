@@ -283,7 +283,8 @@ Canonical split, model retrained per text variant, 5 seeds:
 | **target-disjoint** | 278 | 0.342 ± 0.049 | **0.098 ± 0.019** | 0.097 ± 0.013 |
 | **scaffold- and target-disjoint** | 250 | 0.102 ± 0.026 | **0.060 ± 0.017** | 0.061 ± 0.022 |
 
-- **For unseen targets, name-free retrieval collapses** (0.195 → 0.098). The rich-text score *rises* (0.342) because names and target names still identify the drug.
+- **For unseen targets, name-free retrieval collapses** (0.195 → 0.098).
+- **Correction (E7b):** the rich-text target-split score (0.342) is inflated. **33.4% of target-split test rows have their exact molecule in training** (the same drug listed under another target), and the name lets the model memorise it. Removing test molecules from training gives **rich 0.103, no-drug 0.053** (R@1 struct). A target-disjoint split must also be molecule-disjoint.
 - **When both chemistry and biology are new, only 6% of name-free queries retrieve the right drug.**
 - Mechanism-level generalisation to new targets is the real open problem, and the paper should say so (R1's OOD point).
 
@@ -440,3 +441,50 @@ Published leaderboard numbers therefore largely measure in-scaffold retrieval, w
 A model of two linear heads is competitive with early published models (it reaches roughly the level of the Text2Mol ensemble) while staying fully decomposable. Mean pooling again beats CLS (+4–5 R@1), consistent with E14.
 
 PCdes (KV-PLM) was not run: it has to be rebuilt from raw files (`generate_PCdes.py`). It is listed as remaining work.
+
+### E21: combined experiment, all justified fixes in one model ✅
+The fixes are added one at a time on the canonical scaffold test (5 seeds). The metric is R@1 on the structure-deduplicated gallery (unique parent structures), the protocol recommended in E1.
+
+| Config | no-drug R@1 | no-drug MRR | rich R@1 | rich MRR |
+|---|---|---|---|---|
+| A paper (ECFP4-2048, CLS, dim 256, approved train) | 0.149 ± 0.007 | 0.229 | 0.208 ± 0.010 | 0.297 |
+| B + 8192 bits (E15) | 0.160 ± 0.006 | 0.242 | 0.257 ± 0.004 | 0.347 |
+| C + parent fingerprints (E12) | 0.166 ± 0.007 | 0.271 | 0.214 ± 0.008 | 0.308 |
+| D + mean-pooled text (E14) | 0.167 ± 0.005 | 0.273 | 0.226 ± 0.005 | 0.322 |
+| E + dim 1024 (E19) | 0.165 ± 0.010 | 0.272 | 0.231 ± 0.006 | 0.330 |
+| **F + all-phase training data (E5) = final** | **0.201 ± 0.003** | **0.315** | 0.236 ± 0.001 | 0.333 |
+
+- **Name-free retrieval improves by 35%** (0.149 → 0.201) and MRR by 38% (0.229 → 0.315). The biggest single gain comes from the extra data (C–E → F).
+- **Parent fingerprints lower rich-text R@1** (B → C: 0.257 → 0.214) because they remove the salt-name shortcut (E12), yet they *improve* the name-free model (0.160 → 0.166). That's the expected signature of removing a shortcut.
+
+**Final model, canonical split, no-drug text, seed 0:** R@1 0.223 [0.168, 0.281] (parent-cluster bootstrap), R@1 struct 0.203, MRR 0.317 [0.265, 0.371].
+
+**vs MolPrompt (no-drug, fine-tuned), same deduplicated gallery:** **0.203 vs 0.097**, paired difference **+0.107 [+0.052, +0.162]**, P(diff ≤ 0) < 10⁻⁴.
+
+| 10 scaffold partitions | paper config R@1 struct | final R@1 struct [95% t-CI] | final MRR |
+|---|---|---|---|
+| no-drug | 0.242 | **0.287** [0.242, 0.332] | 0.400 |
+| rich | 0.281 | 0.322 [0.271, 0.372] | 0.409 |
+
+| OOD split (5 partitions, molecule-disjoint) | text | paper config | final |
+|---|---|---|---|
+| target-disjoint | no-drug | 0.053 (E7b) | **0.073** |
+| target-disjoint | rich | 0.103 (E7b) | 0.103 |
+| scaffold + target disjoint | no-drug | 0.066 | **0.094** |
+| scaffold + target disjoint | rich | 0.104 | 0.108 |
+
+The "paper config" target numbers in the raw E21 output (0.111 / 0.348) still contain the molecule overlap; the molecule-disjoint values from E7b are shown here.
+
+**The final model is also more interpretable** (same 16-class pharmacophore test as E13, n = 86):
+
+| | paper model (E13) | final model |
+|---|---|---|
+| saliency mass on pharmacophore (chance 0.27) | 0.31 | **0.43** |
+| top-3 atoms hit pharmacophore (chance 0.51) | 0.70 | **0.84** |
+| same, with wrong-class text | 0.47 | 0.50 |
+| p (correct > wrong text) | 3×10⁻⁷ | **5×10⁻¹⁵** |
+| counterion-driven top-1 saliency | 76% of salt rows | 0 (by construction) |
+
+Deletion check on the final model (score drop for top-k salient vs random k bits): k=1 0.049 vs 0.002; k=3 0.134 vs 0.008; k=5 0.204 vs 0.014.
+
+**Bottom line:** removing the shortcuts the reviewers suspected (names, salts, collisions) and adding data makes MoleculeLens **both more accurate without names and more chemically grounded**. The +10.7-point name-free margin over MolPrompt is a clean replacement for the paper's +9.6 headline, which mixed tie rules and names.
