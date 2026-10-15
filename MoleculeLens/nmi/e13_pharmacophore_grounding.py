@@ -15,8 +15,6 @@ Nulls:
   (c) untrained     : the paper's saved initial heads (proj_*_0.pt)
 Tests: one-sided Wilcoxon signed-rank (correct text > wrong text; correct > chance), per class + pooled.
 """
-import re
-
 import numpy as np
 import pandas as pd
 import torch
@@ -25,26 +23,7 @@ from scipy.stats import wilcoxon
 
 import core as C
 
-CLASSES = [
-    ("carbonic anhydrase inhibitor", r"carbonic anhydrase", "[SX4](=O)(=O)[NX3;H2]"),
-    ("beta-lactam / PBP", r"penicillin-binding|beta-lactamase", "O=C1[#6,#7][#6][#7]1"),
-    ("HMG-CoA reductase inhibitor", r"HMG-CoA", "[OX2H][CX4][CX4][CX4]([OX2H])[CX4]C(=O)[OX2H1,OX1-,OX2]"),
-    ("steroid nuclear receptor", r"glucocorticoid|mineralocorticoid|androgen receptor|progesterone receptor|estrogen receptor",
-     "[#6]1~[#6]~[#6]~[#6]2~[#6](~[#6]~1)~[#6]~[#6]~[#6]1~[#6]~2~[#6]~[#6]~[#6]2~[#6]~[#6]~[#6]~[#6]~1~2"),
-    ("nucleoside/nucleobase polymerase-RT inhibitor", r"polymerase inhibitor|reverse transcriptase inhibitor|thymidylate",
-     "[$([#6]1~[#7]~[#6]~[#7]~[#6]2~[#6]~1~[#7]~[#6]~[#7]~2),$([#6]1(=O)~[#7]~[#6]~[#6]~[#6]~[#7]~1)]"),
-    ("fluoroquinolone / gyrase", r"gyrase|topoisomerase IV", "O=C([OX2H1,OX1-])c1c[nX3]c2ccccc2c1=O"),
-    ("beta-adrenergic ligand", r"beta-?\d? adrenergic|beta adrenergic|adrenergic receptor beta", "[OX2H][CX4][CX4][NX3]"),
-    ("proton pump inhibitor", r"potassium-transporting ATPase", "c1nc2ccccc2[nX3]1"),
-    ("benzodiazepine GABA-A modulator", r"GABA-A receptor", "[#7]1~[#6]~[#6]~[#7]~[#6]~c2ccccc~21"),
-    ("COX inhibitor", r"cyclooxygenase", "[$(c[CX4]C(=O)[OX2H1,OX1-]),$(c[CX4H]([CH3])C(=O)[OX2H1,OX1-]),$(cC(=O)[OX2H1,OX1-]),$([SX4](=O)(=O)([NH2,CH3])c)]"),
-    ("angiotensin II receptor antagonist", r"angiotensin II", "[$(c1nn[nH]n1),$(c1n[nH]nn1),$(c1ccc(cc1)-c1ccccc1)]"),
-    ("dihydropyridine Ca-channel blocker", r"calcium channel", "[#6]1=[#6][#7H][#6]=[#6][#6]1"),
-    ("DHFR inhibitor", r"dihydrofolate reductase", "[NX3H2]c1nc([NX3H2])[c,n][c,n]n1"),
-    ("DHPS sulfonamide antibacterial", r"dihydropteroate", "c[SX4](=O)(=O)[NX3]"),
-    ("bisphosphonate FPPS inhibitor", r"farnesyl", "P(=O)(O)(O)[CX4]P(=O)(O)O"),
-    ("azole CYP51 antifungal", r"lanosterol|sterol 14|CYP51|51A1", "[$([nX3]1cncc1),$([nX3]1cncn1)]"),
-]
+from pharm import CLASSES, classify, score, top3_chance  # noqa: E402
 
 df = C.load_df()
 te = np.array(C.canonical_split()["test"])
@@ -74,19 +53,8 @@ def atom_saliency(mol, info, a):
     return s
 
 
-def score(sal, pharm):
-    pos = np.clip(sal, 0, None)
-    mass = pos[list(pharm)].sum() / pos.sum() if pos.sum() > 0 else 0.0
-    order = np.argsort(-sal)
-    return float(mass), float(order[0] in pharm), float(len(set(order[:3]) & pharm) > 0)
-
-
 text = (dft.mechanism_of_action.fillna("") + " " + dft.target_name.fillna("")).values
-cls_of = np.full(len(dft), -1)
-for k, (_, rx, _) in enumerate(CLASSES):
-    for i in range(len(dft)):
-        if cls_of[i] < 0 and re.search(rx, text[i], re.I):
-            cls_of[i] = k
+cls_of = classify(text)
 rng = np.random.default_rng(0)
 recs = []
 for i in range(len(dft)):
@@ -108,7 +76,7 @@ for i in range(len(dft)):
     w = [score(atom_saliency(mol, info, C.saliency(*trained, Zt[j], X[i])), pharm)
          for j in rng.choice(others, 20, replace=False)]
     r["mass_wrongtext"], r["top1_wrongtext"], r["top3_wrongtext"] = [float(np.mean(x)) for x in zip(*w)]
-    r["top3_chance"] = 1 - np.prod([(heavy - len(pharm) - t) / (heavy - t) for t in range(3)])
+    r["top3_chance"] = top3_chance(heavy, len(pharm))
     recs.append(r)
 
 d = pd.DataFrame(recs)

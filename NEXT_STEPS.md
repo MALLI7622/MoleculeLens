@@ -330,3 +330,59 @@ All 435 pairs; zero the top-k salient bits of the correct molecule vs. k random 
 - Deleting the least-salient (negative) bits *improves* the score.
 - The fast proxy and the exact leave-one-out ranking give nearly identical drops (0.164 vs 0.165 at k=3).
 - This is model-faithfulness evidence; chemical validity is tested separately in E13. An atom-level deletion variant is being rerun after a code fix.
+
+### E12: salts and counterions in the saliency ✅ (R1's Fig. 3 concern confirmed and explained)
+- **204/435 test rows (47%) are salts or have counterions.** In the paper checkpoint the **top-1 salient bit is a counterion-only environment for 156 of them (76%)**; a counterion bit is in the top 6 for 186 (91%); 22% of absolute attribution mass sits on counterion bits.
+- **Mechanism: a salt-name shortcut.** 180/204 salt rows name the salt in the drug name ("ACYCLOVIR **SODIUM**", "MAFENIDE **ACETATE**"). The top-1 counterion share is 76% for the rich model, 50% for the same model with the name removed at inference, and **3% for the model trained without names**. The model learned to match the salt word in the name to the counterion bit.
+- **Parent-structure (salt-stripped) fingerprints**, 10 seeds:
+
+| Fingerprint | R@1 | R@1 struct (unique parent) | R@5 | MRR |
+|---|---|---|---|---|
+| original | 0.213 ± 0.010 | 0.206 ± 0.009 | 0.384 | 0.299 |
+| parent | 0.206 ± 0.006 | 0.182 ± 0.006 | 0.342 | 0.273 |
+
+  About 2.4 R@1 points (deduplicated gallery) of the original score come from the salt shortcut.
+- **Fig. 3 re-done with the parent model:**
+  - Mafenide: top bits move from acetate to the aryl sulfonamide (`cccc(c)S`, `O=S`).
+  - Acyclovir: `Na` disappears; the top bit becomes the guanine base (`cc([O-])nc(n)N`).
+  - Carbamazepine and albuterol are unchanged (carboxamide / ethanolamine).
+- **Action:** use parent fingerprints and regenerate Fig. 3. Report the salt-name shortcut as a *finding*: it is a clean example of the leakage MoleculeLens is designed to expose.
+
+### E13: quantitative pharmacophore grounding ✅ (automated proxy for an expert study)
+16 mechanism classes, each mapped to a literature pharmacophore (SMARTS, `nmi/pharm.py`). 118/435 test pairs fall in a class and **86** contain the pharmacophore. Atom saliency = Eq. 1 spread over each bit's atoms.
+
+| | positive saliency mass on pharmacophore | top-1 atom in pharmacophore | top-3 atoms hit pharmacophore |
+|---|---|---|---|
+| **correct mechanism text** | **0.31** | **0.30** | **0.70** |
+| same molecule, 20 wrong-class texts | 0.25 | 0.25 | 0.47 |
+| untrained heads | 0.27 | – | – |
+| chance (random atoms) | 0.26 | 0.26 | 0.50 |
+
+- **Pooled:** correct > chance, p = 9×10⁻⁶; correct > wrong text, p = 3×10⁻⁷ (one-sided Wilcoxon).
+- **Strongest classes:** β-adrenergic (top-3 0.85 vs 0.51), COX (0.64 vs 0.26), β-lactam (0.67 vs 0.19), azoles (1.00 vs 0.15).
+- **Failures:** nucleoside/nucleobase polymerase inhibitors (0.07 vs 0.13; the acyclovir case R1 raised). Steroids are uninformative because the pharmacophore covers ~60% of atoms.
+- **Honest summary:** the saliency is **significantly and text-specifically** grounded, but the effect is **modest** (1.2× chance in mass, 1.4× in top-3 hit rate) and class-dependent.
+- **Action:** replace "chemically meaningful substructures" with this quantified, class-level statement; a small expert study remains optional.
+
+### E18–E20: ECFP radius, embedding dimension, compute ✅
+| Fingerprint (2048 bits, 5 seeds) | R@1 rich | R@1 no-drug |
+|---|---|---|
+| ECFP2 | 0.219 ± 0.007 | 0.134 ± 0.004 |
+| ECFP4 (paper) | 0.214 ± 0.013 | 0.130 ± 0.007 |
+| ECFP6 | 0.223 ± 0.011 | 0.130 ± 0.005 |
+| ECFP8 | 0.206 ± 0.003 | 0.131 ± 0.008 |
+
+Radius does not matter within noise. Note that ECFP6 is not worse, which answers R1.
+
+| Shared dim | 32 | 64 | 128 | 256 (paper) | 512 | 1024 |
+|---|---|---|---|---|---|---|
+| R@1 (5 seeds) | 0.160 | 0.185 | 0.207 | 0.214 | 0.215 | **0.226** |
+
+**E20 compute (Tesla T4 16 GB, GCP n1-standard-4):**
+- text encoding of all 2,699 rows: 10.8 s (all 13 layers: 10.5 s)
+- ECFP4 for 2,699 molecules: 0.8 s
+- training both heads for 100 epochs: **1.05 s**
+- evaluation (435×435): 0.01 s
+- Eq. 1 attribution for all 435 pairs: 0.27 s; exact gradients for all 435 pairs: 0.57 s
+
+The paper's original runs used an NVIDIA L4 24 GB (`g2-standard-4`).

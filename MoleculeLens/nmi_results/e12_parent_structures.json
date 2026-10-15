@@ -4,7 +4,11 @@
     "of_435": 435,
     "top1_bit_is_counterion_only": 156,
     "any_top6_bit_counterion_only": 186,
-    "mean_abs_attribution_mass_on_counterion_bits": 0.22395729702696496
+    "mean_abs_attribution_mass_on_counterion_bits": 0.22395729702696496,
+    "salt_rows_whose_drug_name_names_the_salt": 180,
+    "top1_counterion_share_rich_model": 0.7647058823529411,
+    "top1_counterion_share_nodrug_model": 0.029411764705882353,
+    "top1_counterion_share_rich_model_name_removed_at_inference": 0.5
   },
   "retrieval_original_vs_parent_fp_10seeds": {
     "original": {
@@ -27,6 +31,10 @@
       "R@1_struct": [
         0.20080459770114945,
         0.009116036808688902
+      ],
+      "R@1_struct_parent": [
+        0.20620689655172414,
+        0.008706680531274017
       ]
     },
     "parent": {
@@ -49,6 +57,10 @@
       "R@1_struct": [
         0.15973180076628352,
         0.0056438861004380406
+      ],
+      "R@1_struct_parent": [
+        0.1817241379310345,
+        0.005694522989575244
       ]
     }
   },
@@ -283,7 +295,7 @@
     },
     "ACYCLOVIR": {
       "name": "ACYCLOVIR SODIUM",
-      "expected": "guanine base",
+      "expected": "guanine (purine) base",
       "paper_model_original_fp": {
         "top6": [
           {
