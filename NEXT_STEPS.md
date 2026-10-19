@@ -462,7 +462,7 @@ Re-downloaded ChEMBL_37 and applied the e05 cleaning steps one at a time (`nmi/e
 
 Rows dropped for having no SMILES, by ChEMBL molecule type (rows): Unknown 677, Antibody 632, Protein 295, Small molecule 130, Antibody–drug conjugate 123, Enzyme 85, Vaccine component 77, Oligonucleotide 75, Gene 29, Oligosaccharide 14, Cell 11. About 1,400 of the 2,148 are biologics; the 677 "Unknown" and 130 small molecules without a structure are mostly undisclosed or mixture entries.
 
-The final set has 3,816 molecules: 3,970 molecule–type counts are dominated by small molecules, plus 122 peptide "Protein" entries that do have a SMILES. By max phase: 2,769 approved, 680 phase 3, 1,292 phase 2, 268 phase 1, 26 unknown.
+The 4,110 molecules that have a SMILES are 3,970 small molecules, 122 peptides typed "Protein", and 18 others; after the text and duplicate filters, 3,816 molecules remain. By max phase: 2,769 approved, 680 phase 3, 1,292 phase 2, 268 phase 1, 26 unknown.
 
 **For the paper:** the 5,035 pairs are all of ChEMBL's curated mechanism annotations that can be paired with a molecular structure. The rest of ChEMBL (bioactivity data) has no mechanism text.
 
