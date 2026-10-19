@@ -1,0 +1,90 @@
+{
+  "chembl_release": "ChEMBL_37",
+  "steps": [
+    {
+      "step": "ChEMBL drug_mechanism table, all rows",
+      "rows_left": 7561,
+      "removed": null
+    },
+    {
+      "step": "molecular_mechanism = 1 (the e05 download filter)",
+      "rows_left": 7559,
+      "removed": 2
+    },
+    {
+      "step": "has a molecule ChEMBL id",
+      "rows_left": 7559,
+      "removed": 0
+    },
+    {
+      "step": "molecule has a SMILES structure",
+      "rows_left": 5411,
+      "removed": 2148
+    },
+    {
+      "step": "mechanism text present",
+      "rows_left": 5411,
+      "removed": 0
+    },
+    {
+      "step": "mechanism text longer than 15 characters",
+      "rows_left": 5066,
+      "removed": 345
+    },
+    {
+      "step": "unique (molecule, target) pair",
+      "rows_left": 5035,
+      "removed": 31
+    }
+  ],
+  "no_smiles_by_molecule_type": {
+    "rows": {
+      "Unknown": 677,
+      "Antibody": 632,
+      "Protein": 295,
+      "Small molecule": 130,
+      "Antibody drug conjugate": 123,
+      "Enzyme": 85,
+      "Vaccine component": 77,
+      "Oligonucleotide": 75,
+      "Gene": 29,
+      "Oligosaccharide": 14,
+      "Cell": 11
+    },
+    "molecules": {
+      "Unknown": 586,
+      "Antibody": 567,
+      "Protein": 237,
+      "Small molecule": 122,
+      "Enzyme": 73,
+      "Oligonucleotide": 72,
+      "Vaccine component": 69,
+      "Antibody drug conjugate": 63,
+      "Gene": 28,
+      "Oligosaccharide": 14,
+      "Cell": 11
+    }
+  },
+  "kept_molecule_types": {
+    "Small molecule": 3970,
+    "Protein": 122,
+    "Unknown": 9,
+    "Oligosaccharide": 5,
+    "Oligonucleotide": 4
+  },
+  "final_unique_molecules": 3816,
+  "final_by_max_phase": {
+    "4": 2769,
+    "2": 1292,
+    "3": 680,
+    "1": 268,
+    "-1": 26
+  },
+  "check_vs_committed_csv": {
+    "committed_rows": 5035,
+    "rerun_rows": 5035,
+    "pairs_in_both": 5035,
+    "only_in_rerun": 0,
+    "only_in_committed": 0
+  }
+}

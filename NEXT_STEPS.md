@@ -449,6 +449,23 @@ Downloaded all ChEMBL mechanism rows with no phase filter (`nmi/e05_download_exp
 - **For investigational compounds, names *hurt*:** rich 0.107 < name-free 0.147, because their names are mostly development codes that carry no INN-stem signal.
 - **The name shortcut only works for drugs with informative INN names.** That's a useful robustness argument for name-free evaluation.
 
+### E5b: data funnel for the all-phase dataset ✅
+Re-downloaded ChEMBL_37 and applied the e05 cleaning steps one at a time (`nmi/e05b_data_funnel.py`, results in `nmi_results/e05b_data_funnel.{md,json}`). The re-run reproduces the committed CSV exactly (5,035/5,035 molecule–target pairs).
+
+| Step | Rows left | Removed |
+|---|---|---|
+| ChEMBL drug_mechanism table, all rows | 7,561 | - |
+| molecular_mechanism = 1 | 7,559 | 2 |
+| molecule has a SMILES structure | 5,411 | 2,148 |
+| mechanism text longer than 15 characters | 5,066 | 345 |
+| unique (molecule, target) pair | **5,035** | 31 |
+
+Rows dropped for having no SMILES, by ChEMBL molecule type (rows): Unknown 677, Antibody 632, Protein 295, Small molecule 130, Antibody–drug conjugate 123, Enzyme 85, Vaccine component 77, Oligonucleotide 75, Gene 29, Oligosaccharide 14, Cell 11. About 1,400 of the 2,148 are biologics; the 677 "Unknown" and 130 small molecules without a structure are mostly undisclosed or mixture entries.
+
+The final set has 3,816 molecules: 3,970 molecule–type counts are dominated by small molecules, plus 122 peptide "Protein" entries that do have a SMILES. By max phase: 2,769 approved, 680 phase 3, 1,292 phase 2, 268 phase 1, 26 unknown.
+
+**For the paper:** the 5,035 pairs are all of ChEMBL's curated mechanism annotations that can be paired with a molecular structure. The rest of ChEMBL (bioactivity data) has no mechanism text.
+
 ### E6: established benchmarks (ChEBI-20, PubChem324kV2) ✅
 MoleculeLens trained exactly as in the paper on each benchmark's own train split (no target labels, so the loss reduces to symmetric InfoNCE; text max length 256). Text → molecule retrieval, 3 seeds:
 
