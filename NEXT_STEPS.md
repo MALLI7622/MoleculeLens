@@ -466,6 +466,24 @@ The 4,110 molecules that have a SMILES are 3,970 small molecules, 122 peptides t
 
 **For the paper:** the 5,035 pairs are all of ChEMBL's curated mechanism annotations that can be paired with a molecular structure. The rest of ChEMBL (bioactivity data) has no mechanism text.
 
+### E22b: which development phases to train on, and release weights ✅
+Final config (parent ECFP4 8192 bits, mean-pooled text, dim 1024) trained on phase-filtered subsets of the E21 pool; canonical scaffold test, 5 seeds; R@1 on the structure-deduplicated gallery (`nmi/e22b_phase_subsets_release.py`).
+
+| Training set | n_train | no-drug R@1 | no-drug MRR | rich R@1 |
+|---|---|---|---|---|
+| paper: approved train | 2,019 | 0.165 ± 0.010 | 0.272 | 0.231 ± 0.006 |
+| approved only (phase 4) | 2,082 | 0.171 ± 0.009 | 0.278 | 0.223 ± 0.012 |
+| phase ≥ 3 | 2,724 | 0.173 ± 0.009 | 0.288 | 0.213 ± 0.009 |
+| **all phases (E21 final)** | 4,265 | **0.201 ± 0.003** | **0.315** | 0.236 ± 0.001 |
+| all phases, ≤ 150 atoms (MolPrompt E22 train) | 4,238 | 0.191 ± 0.006 | 0.303 | 0.230 ± 0.007 |
+
+Over 10 scaffold partitions, no-drug: approved 0.256, phase ≥3 0.263, all phases 0.287 [0.242, 0.332].
+
+- **Phase ≥3 buys almost nothing** (0.173 vs 0.171 approved-only). Essentially the whole gain comes from phase 1–2 compounds, whose development-code names carry no INN-stem shortcut. Keep all phases and justify it with this table.
+- The 150-atom cap, needed because MolPrompt runs out of memory on the T4, costs about 1 point.
+
+**Released weights** (`MoleculeLens/nmi_models/`, git-ignored; mirrored to `gs://molecule-lens/moleculelens-nmi/nmi_models/`): `moleculelens_final_{nodrug,rich}_{canonical,alldata}.pt`. Each holds both projection heads plus the full config (fingerprint recipe, text model and pooling, training hyperparameters). The `canonical` pair reproduces the reported test numbers; the `alldata` pair is trained on all 5,035 pairs with no held-out set, for downstream use.
+
 ### E6: established benchmarks (ChEBI-20, PubChem324kV2) ✅
 MoleculeLens trained exactly as in the paper on each benchmark's own train split (no target labels, so the loss reduces to symmetric InfoNCE; text max length 256). Text → molecule retrieval, 3 seeds:
 

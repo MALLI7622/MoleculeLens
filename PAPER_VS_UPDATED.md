@@ -65,7 +65,7 @@ Status: ✅ holds · ⚠️ number changes · ❌ claim does not hold · ➕ new
 |---|---|---|---|---|
 | Dataset | 2,699 approved-drug pairs | 5,035 pairs over all phases (2,769 approved, 680 phase 3, 1,292 phase 2, 268 phase 1, 26 unknown). This is every ChEMBL_37 mechanism annotation with a structure; the excluded 2,148 rows are mostly biologics with no SMILES | ➕ | E5, E5b |
 | "Does not establish generalization to investigational compounds" | stated limitation | Adding non-approved compounds to training raises name-free R@1 0.131 → 0.160 (+22%). For investigational test compounds, names *hurt* (rich 0.107 < no-drug 0.147) | ➕ | E5 |
-| Which phases to train on | – | E22_PHASES | ➕ | E22b |
+| Which phases to train on | – | **All of them.** Name-free R@1 (dedup, 5 seeds): approved only 0.171, phase ≥3 0.173, all phases **0.201**. Restricting to late-stage compounds gives up nearly the whole gain, so the paper should use every phase and say why | ➕ | E22b |
 | Target-disjoint / joint splits | not reported | Target-split rich 0.342 is inflated (33% of test molecules appear in train). Molecule-disjoint: rich 0.103, no-drug 0.053; joint 0.102 / 0.060 | ➕ | E7, E7b |
 | External benchmarks | not reported | ChEBI-20 R@1 0.603 (MRR 0.702); PubChem324kV2 0.392. 70–84% of their test scaffolds appear in training; scaffold-novel R@1 roughly halves | ➕ | E6 |
 
@@ -78,6 +78,12 @@ Final configuration (E21): salt-stripped ECFP4 at 8,192 bits, mean-pooled S-Biom
 | MoleculeLens, canonical test (5 seeds) | 0.149 | **0.201 ± 0.003** | E21 |
 | MoleculeLens, 10 scaffold partitions | 0.242 | **0.287** [0.242, 0.332] | E21 |
 | Pharmacophore top-3 hit | 0.70 | **0.84** | E13, E21 |
+
+### Training-set size, and comparing fairly
+
+The final model trains on 4,265 pairs; MolPrompt's published run used the paper's 2,019. The win does not depend on that extra data: on the paper's own training set the final configuration still reaches 0.165 name-free against MolPrompt's 0.087. E22c repeats the comparison with both models trained on exactly the same rows.
+
+Note: MolPrompt's Graphormer encoder runs out of memory on the T4 for molecules above 150 atoms, so the equal-data runs drop 27 training rows (4,265 → 4,238). That costs MoleculeLens about 1 point (0.201 → 0.191 ± 0.006), and both models are trained on the identical capped set.
 
 E22_EQUALDATA
 
