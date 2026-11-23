@@ -75,16 +75,23 @@ Final configuration (E21): salt-stripped ECFP4 at 8,192 bits, mean-pooled S-Biom
 
 | Name-free R@1 (dedup gallery) | Paper config | Final config | Source |
 |---|---|---|---|
-| MoleculeLens, canonical test (5 seeds) | 0.149 | **0.201 ± 0.003** | E21 |
+| MoleculeLens, canonical test (5 seeds) | 0.149 | **0.201 ± 0.003** | E21, E22b |
 | MoleculeLens, 10 scaffold partitions | 0.242 | **0.287** [0.242, 0.332] | E21 |
 | Pharmacophore top-3 hit | 0.70 | **0.84** | E13, E21 |
 
 ### Training-set size, and comparing fairly
 
-The final model trains on 4,265 pairs; MolPrompt's published run used the paper's 2,019. The win does not depend on that extra data: on the paper's own training set the final configuration still reaches 0.165 name-free against MolPrompt's 0.087. E22c repeats the comparison with both models trained on exactly the same rows.
+The final model trains on 4,265 pairs; MolPrompt's published run used the paper's 2,019, so the overnight summary's +10.7 mixed an architecture gain with a data gain. E22c separates them by training both models on exactly the same rows.
 
 Note: MolPrompt's Graphormer encoder runs out of memory on the T4 for molecules above 150 atoms, so the equal-data runs drop 27 training rows (4,265 → 4,238). That costs MoleculeLens about 1 point (0.201 → 0.191 ± 0.006), and both models are trained on the identical capped set.
 
-E22_EQUALDATA
+**Equal training data** (E22c; both models trained on exactly the same rows, no-drug text, dedup gallery, paired parent-cluster bootstrap):
+
+| Training data | n_train | MoleculeLens | MolPrompt | difference [95% CI] | P(diff ≤ 0) |
+|---|---|---|---|---|---|
+| paper data | 2,019 | 0.162 | 0.097 | **+0.066** [+0.017, +0.113] | 0.0033 |
+| all-phase, ≤150 atoms | 4,238 | 0.199 | 0.133 | **+0.066** [+0.014, +0.118] | 0.0070 |
+
+MolPrompt gains from the extra data much as MoleculeLens does (0.097 → 0.133), and the margin is **+6.6 points in both regimes**. So the two effects are separable and should be reported separately: the architecture is worth about +6.6 points, the data about +3.7. **Quote +6.6 [+1.4, +11.8], not the +10.7 from the overnight summary**, which compared the final model against a MolPrompt trained on half as much data.
 
 **Headline for the NMI version:** an interpretable *leakage audit*. Names, INN stems, salt words and molecule overlap inflate every model's score. MoleculeLens's closed-form lens exposes these shortcuts. Without them it is the strongest name-free model, and the only one whose explanations are chemically grounded.
