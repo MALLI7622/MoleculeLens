@@ -68,6 +68,8 @@ Status: ✅ holds · ⚠️ number changes · ❌ claim does not hold · ➕ new
 | Which phases to train on | – | **All of them.** Name-free R@1 (dedup, 5 seeds): approved only 0.171, phase ≥3 0.173, all phases **0.201**. Restricting to late-stage compounds gives up nearly the whole gain, so the paper should use every phase and say why | ➕ | E22b |
 | Target-disjoint / joint splits | not reported | Target-split rich 0.342 is inflated (33% of test molecules appear in train). Molecule-disjoint: rich 0.103, no-drug 0.053; joint 0.102 / 0.060 | ➕ | E7, E7b |
 | External benchmarks | not reported | ChEBI-20 R@1 0.603 (MRR 0.702); PubChem324kV2 0.392. 70–84% of their test scaffolds appear in training; scaffold-novel R@1 roughly halves | ➕ | E6 |
+| PCdes | not reported | Sentence-level Acc(64) **58.92, above every published model** (KV-PLM\* 55.61, MoMu-K 54.94), but full-gallery R@20 56.3 vs their 68–78. 73.3% of test scaffolds seen in training; scaffold-novel R@1 −34% | ➕ | E23 |
+| Published PCdes "Acc" | – | **Not full-gallery retrieval.** KV-PLM's Acc is top-1 among 64 candidates; only their Recall@20 uses the 3,000 gallery. Papers print the two side by side, which is how MoMu's Fig. 3a shows an Acc above its own R@20 | ➕ | E23 |
 
 ## 7. Final model and the name-free headline
 

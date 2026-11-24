@@ -176,7 +176,12 @@ def encode_texts(texts: list[str], all_layers: bool = False, bs: int = 64) -> to
 # fingerprints
 # ---------------------------------------------------------------------------
 def parent_smiles(smi: str) -> str:
-    return structural_parent_key(smi)
+    # Standardisation raises on molecules that parse but have an illegal valence (seen in PCdes, E23);
+    # fall back to the original SMILES, which is what structural_parent_key already does for unparseable input.
+    try:
+        return structural_parent_key(smi)
+    except Exception:  # noqa: BLE001
+        return smi
 
 
 def fingerprint_matrix(smiles: list[str], radius=2, nbits=2048, parent=False,

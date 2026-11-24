@@ -182,7 +182,7 @@ Priority: **P0** = required before resubmission · **P1** = strongly expected ·
 **Recommended final model (E21):** parent (salt-stripped) ECFP4 with 8192 bits, mean-pooled S-Biomed-RoBERTa, 1024-d shared space, trained on all-phase ChEMBL (5,035 pairs). Evaluate name-free on the structure-deduplicated gallery over 10 scaffold partitions.
 
 **Not done; needs you, or more time:**
-- PCdes benchmark (must be rebuilt from KV-PLM raw files).
+- ~~PCdes benchmark~~ ✅ done (E23).
 - A real expert rating study (E13 is an automated proxy).
 - MoleculeSTM retrained on the all-phase data; both baselines on the OOD splits. (MolPrompt on the all-phase data: done, E22c.)
 - Integrated gradients for MolPrompt.
@@ -483,6 +483,36 @@ Over 10 scaffold partitions, no-drug: approved 0.256, phase ≥3 0.263, all phas
 - The 150-atom cap, needed because MolPrompt runs out of memory on the T4, costs about 1 point.
 
 **Released weights** (`MoleculeLens/nmi_models/`, git-ignored; mirrored to `gs://molecule-lens/moleculelens-nmi/nmi_models/`): `moleculelens_final_{nodrug,rich}_{canonical,alldata}.pt`. Each holds both projection heads plus the full config (fingerprint recipe, text model and pooling, training hyperparameters). The `canonical` pair reproduces the reported test numbers; the `alldata` pair is trained on all 5,035 pairs with no held-out set, for downstream use.
+
+### E23: PCdes benchmark ✅ (completes E6; R3 W1/Q3)
+KV-PLM's own files (`Ret/align_smiles.txt`, `Ret/align_des_filt3.txt`), 15,000 PubChem pairs, split exactly as their `Ret/preprocess.py`: sequential slices train 0:10500, dev 10500:12000, test 12000:15000 (`nmi/e23_pcdes.py`). 5 SMILES do not parse. Both published protocols are reproduced: **paragraph** (whole description as the query) and **sentence** (KV-PLM's `calcu_test.py`: split on `.`, drop sentences under 5 words, a molecule scores the mean cosine over its sentences).
+
+**⚠️ The published "Acc" is not full-gallery retrieval.** KV-PLM's Methods: *"we report the accuracy of the top retrieval result in randomly sampled mini-batches (64 pairs in each mini-batch). Models are also required to rank the average matching score for all the 3k molecules... We present recall@20."* So **Acc = top-1 of 64 candidates** and **Recall@20 = full 3,000 gallery**. This is why MoMu's Fig. 3a shows paragraph Acc 61.75 above R@20 60.77 for Sci-BERT, which would be impossible on one gallery. Any comparison must keep the two apart; we report both.
+
+Text → molecule, 3 seeds:
+
+| Config | Protocol | Acc(64) | R@1 (3k) | R@20 (3k) | MRR | R@1 scaffold-novel |
+|---|---|---|---|---|---|---|
+| paper (2048, CLS, 256) | paragraph | **63.18** | 0.292 ± 0.004 | 60.50 | 0.377 | 0.192 |
+| paper | sentence | **58.92** | 0.244 ± 0.004 | 56.34 | 0.328 | 0.164 |
+| final (parent 8192, mean, 1024) | paragraph | 59.95 | **0.304 ± 0.002** | 57.96 | 0.381 | 0.193 |
+| final | sentence | 56.84 | 0.273 ± 0.001 | 54.70 | 0.348 | 0.177 |
+
+Published, all fine-tuned on the PCdes training set (KV-PLM Table 1; MoMu Fig. 3a):
+
+| Model | sentence Acc(64) | sentence R@20 | paragraph Acc(64) | paragraph R@20 |
+|---|---|---|---|---|
+| Sci-BERT | 50.12 | 68.02 | 61.75 | 60.77 |
+| KV-PLM | 54.22 | 71.80 | 64.95 | 64.27 |
+| KV-PLM* | 55.61 | 74.77 | 77.03 | 75.47 |
+| MoMu-S | 55.44 | 76.92 | 80.22 | 79.02 |
+| MoMu-K | 54.94 | 78.29 | 81.45 | 80.62 |
+
+- **At sentence level, two linear heads beat every published model on Acc(64): 58.92 vs 55.61 (KV-PLM\*) and 54.94 (MoMu-K).** On the same protocol we also beat Sci-BERT and KV-PLM at paragraph level (63.18 vs 61.75 / 64.95 — level with KV-PLM).
+- **But we lose badly on full-gallery R@20:** 56.3 vs 68–78 sentence-level, 60.5 vs 60.8–80.6 paragraph-level. The same shape as our ChEMBL result: strong at top rank, weak at broad coverage, where the large pretrained encoders dominate.
+- **The E21 final config is worse here than the paper config on Acc(64)** (59.95 vs 63.18 paragraph). It was tuned for short ChEMBL mechanism text; PCdes descriptions are long ChEBI-style prose. Do not present the final config as universally better.
+- **73.3% of test molecules reuse a training scaffold**, and scaffold-novel R@1 falls from 0.292 to 0.192 (−34%). Together with E6's 70–84% on ChEBI-20 / PubChem324k, this is the evidence for "why another benchmark".
+- **Names:** 75% of PCdes descriptions open with a pronoun or article ("it is a ..."), so the set was built with names removed. Not verified against a real name list — an observation, not a measurement. (`align_smdic.pkl` maps to SMILES, not names, so it cannot test name leakage.)
 
 ### E22c: MolPrompt retrained on the all-phase data — the fair comparison ✅
 MolPrompt fine-tuned with the same recipe as the paper's run (batch 6, `--remove_drug_name`, best val epoch = 27 of 30) on the E21 all-phase pool capped at 150 atoms, with the canonical val/test. Both models then scored on the same deduplicated gallery, paired parent-cluster bootstrap (`nmi/e22a`, `run_molprompt_allphase.sh`, `nmi/e22c`).
